@@ -1,6 +1,7 @@
 package me.matl114.hacks.modules.combat;
 
 import java.awt.Color;
+import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Random;
 import javax.annotation.Nullable;
@@ -41,6 +42,7 @@ import net.minecraft.entity.projectile.ProjectileEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
+import net.minecraft.network.packet.s2c.play.EntityAnimationS2CPacket;
 import net.minecraft.network.packet.s2c.play.EntityDamageS2CPacket;
 import net.minecraft.network.packet.s2c.play.EntityStatusS2CPacket;
 import net.minecraft.util.Hand;
@@ -214,6 +216,31 @@ public class ElytraBotV2 extends BaseModule {
             .validator(Configs.INT_POSITIVE)
             .build();
 
+    // ---------------- v2 adaptive aggression ----------------
+    // vs high-frequency rushers (charged dueling head-on): trade some per-hit
+    // damage for pressure instead of holding charged stabs waiting for peaks
+    public final FlagRef adaptiveAggression =
+            flagBuilder(path.add("adaptive-aggression")).defaultValue(true).build();
+
+    public final IntRef adaptiveWindowTicks = intBuilder(path.add("adaptive-window-ticks"))
+            .defaultValue(40)
+            .validator(Configs.INT_POSITIVE)
+            .show(() -> adaptiveAggression.get())
+            .build();
+
+    public final IntRef adaptiveAttackThreshold = intBuilder(path.add("adaptive-attack-threshold"))
+            .defaultValue(3)
+            .validator(Configs.INT_POSITIVE)
+            .show(() -> adaptiveAggression.get())
+            .build();
+
+    // speed gate measures closing speed (their oncoming velocity counts too):
+    // head-on duels reach the gate naturally instead of waiting for our peak
+    public final FlagRef relativeSpeedGate = flagBuilder(path.add("relative-speed-gate"))
+            .defaultValue(true)
+            .show(() -> mode.get().isIn(Mode.MACE, Mode.SPEAR) && spearMaxDamage.get())
+            .build();
+
     // ---------------- v2 follower terrain ----------------
     public final FlagRef terrainAware = flagBuilder(path.add("terrain-aware"))
             .defaultValue(true)
@@ -240,6 +267,7 @@ public class ElytraBotV2 extends BaseModule {
         registerListener(Listener.getPacketPoint().getChannel(PlayerInteractEntityC2SPacket.class), this::onAttack);
         registerListener(Listener.getPreHandleInputEvents(), this::onInputEvent);
         registerListener(Listener.getPacketPoint().getChannel(EntityStatusS2CPacket.class), this::onEntityStatus);
+        registerListener(Listener.getPacketPoint().getChannel(EntityAnimationS2CPacket.class), this::onEntityAnimation);
         registerListener(RenderListener.getRender3DEvent(), this::onRender);
         registerListener(Listener.getPacketPoint().getChannel(EntityDamageS2CPacket.class), this::onEntityDamage);
     }
@@ -456,6 +484,7 @@ public class ElytraBotV2 extends BaseModule {
             lastTarget = target;
             currentAction = null;
             totemPopTick = Integer.MIN_VALUE;
+            targetAttackTicks.clear();
             trackedPearl = null;
             pearlLanding = null;
         }
@@ -518,6 +547,49 @@ public class ElytraBotV2 extends BaseModule {
     // attack cadence (v2: every attack respects cooldown + interval)
     // ---------------------------------------------------------------
 
+    /** opponent pressure meter: their swings/hits inside the recent window */
+    final ArrayDeque<Integer> targetAttackTicks = new ArrayDeque<>();
+
+    void recordTargetAttack() {
+        int tick = Tasks.getTick();
+        targetAttackTicks.addLast(tick);
+        pruneTargetAttacks(tick);
+    }
+
+    private void pruneTargetAttacks(int tick) {
+        int window = adaptiveWindowTicks.get();
+        while (!targetAttackTicks.isEmpty() && tick - targetAttackTicks.peekFirst() > window) {
+            targetAttackTicks.pollFirst();
+        }
+    }
+
+    /** high pressure = the target is swinging fast (high-frequency rusher) */
+    public boolean underHighPressure() {
+        if (!adaptiveAggression.get()) {
+            return false;
+        }
+        pruneTargetAttacks(Tasks.getTick());
+        return targetAttackTicks.size() >= adaptiveAttackThreshold.get();
+    }
+
+    /**
+     * impact speed for the kinetic gate: our full speed plus the target's
+     * oncoming component — a head-on dueler already feeds us the closing speed
+     */
+    double stabImpactSpeed() {
+        double speed = mc.player.getVelocity().length();
+        if (relativeSpeedGate.get() && target != null) {
+            Vec3d toTarget = target.getPos().subtract(mc.player.getPos());
+            if (toTarget.lengthSquared() > 1E-4) {
+                double targetClosing = -target.getVelocity().dotProduct(toTarget.normalize());
+                if (targetClosing > 0) {
+                    speed += targetClosing;
+                }
+            }
+        }
+        return speed;
+    }
+
     /** max-damage gate: stab only at dive-speed peaks (kinetic damage ~ speed) */
     public boolean spearStabReady() {
         if (!spearMaxDamage.get()) {
@@ -527,18 +599,30 @@ public class ElytraBotV2 extends BaseModule {
         if (killWindowOpen()) {
             // the window is worth more than the perfect hit: accept a slower stab
             minSpeed *= 0.8D;
+        } else if (underHighPressure()) {
+            // they out-tempo us: stop holding charged stabs for the perfect peak
+            minSpeed *= 0.85D;
         }
-        return mc.player.getVelocity().length() >= minSpeed;
+        return stabImpactSpeed() >= minSpeed;
     }
 
     public boolean attackReady() {
         // press harder in the kill window: relaxed cooldown gate + interval
         boolean killWindow = killWindowOpen();
-        double threshold = killWindow ? Math.min(0.7D, attackCadence.get() * 0.8D) : attackCadence.get();
+        boolean pressure = !killWindow && underHighPressure();
+        double threshold = attackCadence.get();
+        if (killWindow) {
+            threshold = Math.min(0.7D, threshold * 0.8D);
+        } else if (pressure) {
+            threshold = Math.min(0.75D, threshold * 0.85D);
+        }
         if (mc.player.getAttackCooldownProgress(0.5F) < threshold) {
             return false;
         }
-        int interval = killWindow ? Math.max(1, attackMinInterval.get() - 1) : attackMinInterval.get();
+        int interval = attackMinInterval.get();
+        if (killWindow || pressure) {
+            interval = Math.max(1, interval - 1);
+        }
         return Tasks.getTick() - lastAttackTick >= interval;
     }
 
@@ -657,8 +741,24 @@ public class ElytraBotV2 extends BaseModule {
         }
     }
 
+    public void onEntityAnimation(Event<EntityAnimationS2CPacket> animationEvent) {
+        // pressure meter: count the target's main-hand swings (attacks and
+        // whiffs both count — a rusher's tempo is the signal)
+        if (!adaptiveAggression.get() || !enable.get() || checkNull()) return;
+        var animation = animationEvent.context;
+        if (animation.getAnimationId() == EntityAnimationS2CPacket.SWING_MAIN_HAND
+                && target != null
+                && animation.getEntityId() == target.getId()) {
+            recordTargetAttack();
+        }
+    }
+
     public void onEntityDamage(Event<EntityDamageS2CPacket> damageEvent) {
         if (checkNull()) return;
+        // they landed a hit on anything (us included): that is pressure too
+        if (adaptiveAggression.get() && target != null && damageEvent.context.sourceCauseId() == target.getId()) {
+            recordTargetAttack();
+        }
         if (currentBehaviour instanceof HitListenerV2 listener
                 && enable.get()
                 && damageEvent.context.sourceCauseId() == mc.player.getId()
