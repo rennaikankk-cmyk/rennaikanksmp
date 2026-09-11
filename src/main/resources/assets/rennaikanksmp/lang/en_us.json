@@ -403,6 +403,7 @@
 	"render.nether-roof-esp.min-blocks": "基岩顶: 最少方块数过滤",
 	"render.nether-roof-esp.color": "基岩顶: 标记颜色",
 	"render.nether-roof-esp.show-tracers": "基岩顶: 显示指引线",
+	"render.nether-roof-esp.rescan-interval-ticks": "基岩顶: 增量重扫间隔(tick)",
 	"other.queue-notify.enable": "事件通知",
 	"other.queue-notify.hotkey": "事件通知: 快捷键",
 	"other.queue-notify.mode": "事件通知: 模式",
