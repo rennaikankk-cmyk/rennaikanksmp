@@ -139,14 +139,27 @@ public class ElytraBotV2 extends BaseModule {
             .build();
 
     // ---------------- v2 target intelligence ----------------
+    // totem is ONE extra life, not a reason to hold fire: keep hitting through
+    // it, then press harder during the post-pop kill window
     public final FlagRef totemAware = flagBuilder(path.add("totem-aware"))
             .defaultValue(true)
-            .show(() -> mode.get().isIn(Mode.MACE))
+            .show(() -> mode.get().isIn(Mode.MACE, Mode.SPEAR))
+            .build();
+
+    public final IntRef killWindowTicks = intBuilder(path.add("kill-window-ticks"))
+            .defaultValue(60)
+            .validator(Configs.INT_POSITIVE)
+            .show(() -> totemAware.get())
+            .build();
+
+    public final FlagRef totemHover = flagBuilder(path.add("totem-hover"))
+            .defaultValue(false)
+            .show(() -> mode.get().isIn(Mode.MACE) && totemAware.get())
             .build();
 
     public final DoubleRef totemHoverHeight = doubleBuilder(path.add("totem-hover-height"))
             .defaultValue(14.0D)
-            .show(() -> mode.get().isIn(Mode.MACE) && totemAware.get())
+            .show(() -> mode.get().isIn(Mode.MACE) && totemHover.get())
             .build();
 
     public final FlagRef pearlAware =
@@ -330,8 +343,20 @@ public class ElytraBotV2 extends BaseModule {
         return Tasks.getTick() - totemPopTick > 3;
     }
 
-    public boolean totemGateActive() {
-        return totemAware.get() && targetHasTotem();
+    /** conservative play (off by default): hold at altitude while their totem is up */
+    public boolean totemHoverActive() {
+        return totemAware.get() && totemHover.get() && targetHasTotem();
+    }
+
+    /**
+     * kill window: right after a totem pop the target sits at half health with
+     * absorption gone, scrambling to re-totem — that is when presses connect
+     */
+    public boolean killWindowOpen() {
+        if (!totemAware.get() || totemPopTick == Integer.MIN_VALUE) {
+            return false;
+        }
+        return Tasks.getTick() - totemPopTick < killWindowTicks.get();
     }
 
     @Nullable
@@ -498,14 +523,23 @@ public class ElytraBotV2 extends BaseModule {
         if (!spearMaxDamage.get()) {
             return true;
         }
-        return mc.player.getVelocity().length() >= spearStabMinSpeed.get();
+        double minSpeed = spearStabMinSpeed.get();
+        if (killWindowOpen()) {
+            // the window is worth more than the perfect hit: accept a slower stab
+            minSpeed *= 0.8D;
+        }
+        return mc.player.getVelocity().length() >= minSpeed;
     }
 
     public boolean attackReady() {
-        if (mc.player.getAttackCooldownProgress(0.5F) < attackCadence.get()) {
+        // press harder in the kill window: relaxed cooldown gate + interval
+        boolean killWindow = killWindowOpen();
+        double threshold = killWindow ? Math.min(0.7D, attackCadence.get() * 0.8D) : attackCadence.get();
+        if (mc.player.getAttackCooldownProgress(0.5F) < threshold) {
             return false;
         }
-        return Tasks.getTick() - lastAttackTick >= attackMinInterval.get();
+        int interval = killWindow ? Math.max(1, attackMinInterval.get() - 1) : attackMinInterval.get();
+        return Tasks.getTick() - lastAttackTick >= interval;
     }
 
     public void markAttacked() {
@@ -866,8 +900,9 @@ public class ElytraBotV2 extends BaseModule {
             boolean mayFollow = (mc.player.getY() >= targetY)
                     || (startPullUpTick != 0 && Tasks.getTick() > startPullUpTick + base.maceMaxPullUpTick.get());
             if (mayFollow) {
-                // v2: hold at height while their totem is up, dive on the pop
-                if (base.totemGateActive()) {
+                // conservative play only: hover while their totem is up (off by
+                // default — a totem is one extra life, breaking it IS progress)
+                if (base.totemHoverActive()) {
                     return STATE_HOVER;
                 }
                 return STATE_FOLLOW;
@@ -878,7 +913,7 @@ public class ElytraBotV2 extends BaseModule {
         }
 
         public int onStateHover(StateMachine machine) {
-            if (!base.totemGateActive()) {
+            if (!base.totemHoverActive()) {
                 // totem gone (popped or never there): dive window
                 machine.markForEndState();
                 return STATE_FOLLOW;
@@ -910,8 +945,8 @@ public class ElytraBotV2 extends BaseModule {
             if (shouldPullUpEating()) {
                 return STATE_PULL_UP;
             }
-            // v2: they re-totemed while we dive and we still have room to abort
-            if (base.totemGateActive() && !base.currentInCombatRange && mc.player.getY() > base.target.getY() + 6.0D) {
+            // conservative play only: abort the dive when they re-totemed
+            if (base.totemHoverActive() && !base.currentInCombatRange && mc.player.getY() > base.target.getY() + 6.0D) {
                 return STATE_HOVER;
             }
             Vec3d targetPos = base.predictTargetPos();
@@ -929,7 +964,10 @@ public class ElytraBotV2 extends BaseModule {
             Vec3d testMovement = new Vec3d(0, -0.1, 0);
             Vec3d simulation = MovTasks.simulateMovement(mc.player, mc.player.getPos(), testMovement, true);
             boolean feetBlocked = simulation.squaredDistanceTo(testMovement) > 1E-4;
-            boolean needPullUp = feetBlocked || base.target.getY() > mc.player.getY() + base.maceFollowMinHeight.get();
+            // kill window: stay glued to the target, tolerate a bigger height
+            // deficit before giving up the dive
+            double followTolerance = base.maceFollowMinHeight.get() + (base.killWindowOpen() ? 3.0D : 0.0D);
+            boolean needPullUp = feetBlocked || base.target.getY() > mc.player.getY() + followTolerance;
             if (needPullUp) {
                 if (targetInRange) {
                     setTargetToPlayer(targetPos);
@@ -1172,9 +1210,13 @@ public class ElytraBotV2 extends BaseModule {
                 if (spearDropped) {
                     engageUntil = Tasks.getTick() + 40;
                 }
-                if (!base.targetHasTotem() || !base.totemAware.get()) {
-                    return STATE_ENGAGE;
-                }
+                // their spear is spent — engage regardless of totem: breaking a
+                // totem is progress, not a reason to hold fire
+                return STATE_ENGAGE;
+            }
+            // kill window: their totem just popped, dive in immediately
+            if (base.killWindowOpen()) {
+                return STATE_ENGAGE;
             }
             if (base.isTargetUsingSpear() && spearThreatens()) {
                 dodgeTicksLeft = 5;
