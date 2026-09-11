@@ -13,10 +13,13 @@ import me.matl114.hacks.utils.config.WrapColor;
 import me.matl114.hacks.utils.render.RenderCollectors;
 import me.matl114.hacks.utils.render.RenderElements;
 import me.matl114.managers.Configs;
+import me.matl114.managers.FileManager;
+import me.matl114.managers.Tasks;
 import me.matl114.managers.config.FlagRef;
 import me.matl114.managers.config.IntRef;
 import me.matl114.managers.config.KeyBindRef;
 import me.matl114.managers.config.NBTRef;
+import me.matl114.managers.file.FileStorage;
 import me.matl114.managers.input.MultiKeyBind;
 import me.matl114.utils.ColorUtils;
 import me.matl114.utils.RenderUtils;
@@ -25,6 +28,11 @@ import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.entity.vehicle.AbstractMinecartEntity;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtOps;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.math.Box;
@@ -72,6 +80,12 @@ public class NetherRoofESP extends BaseModule {
             .validator(Configs.INT_POSITIVE)
             .build();
 
+    /** how often known findings get rescanned to compute the growth delta */
+    public final IntRef rescanIntervalTicks = intBuilder(root.add("rescan-interval-ticks"))
+            .defaultValue(600)
+            .validator(Configs.INT_POSITIVE)
+            .build();
+
     public final NBTRef<WrapColor> color = builder(root.add("color"), WrapColor.class)
             .defaultValue(new WrapColor(Formatting.AQUA))
             .build();
@@ -79,11 +93,24 @@ public class NetherRoofESP extends BaseModule {
     public final FlagRef showTracers =
             builder(root.add("show-tracers"), Boolean.class).defaultValue(true).build();
 
-    private record Finding(Vec3d center, int blockCount, boolean portal, boolean chest) {}
+    private record Finding(Vec3d center, int blockCount, boolean portal, boolean chest, int delta, boolean active) {}
 
     private final Map<Long, Finding> findings = new HashMap<>();
     private final Set<Long> scannedChunks = new HashSet<>();
     private net.minecraft.registry.RegistryKey<net.minecraft.world.World> currentDimension;
+
+    // ---------------------------------------------------------------
+    // verification helpers: persisted per-server block-count baseline for
+    // growth deltas, plus a live entity-activity pass over loaded chunks
+    // ---------------------------------------------------------------
+    private final FileStorage snapshotStorage =
+            FileManager.getInstance().getInternalStorage("nether-roof-esp-snapshot.nbt");
+    private final Map<String, Integer> savedBaseline = new HashMap<>();
+    private String baselinePrefix;
+    private boolean baselineLoaded = false;
+    private int nextRescanTick;
+    private int nextActivityTick;
+    private final Map<Long, Boolean> chunkActivity = new HashMap<>();
 
     private final RenderCollector<Box> boxCollector = RenderCollectors.createBoxCollector(true, true, false);
     private final RenderCollector<RenderElements.Text> textCollector = RenderCollectors.createTextCollector();
@@ -105,11 +132,26 @@ public class NetherRoofESP extends BaseModule {
         if (dimension != currentDimension) {
             resetState();
             currentDimension = dimension;
+            ensureBaselineLoaded();
+        }
+        int tick = Tasks.getTick();
+        if (tick >= nextActivityTick) {
+            nextActivityTick = tick + 20;
+            refreshActivity();
+        }
+        if (tick >= nextRescanTick && !findings.isEmpty()) {
+            nextRescanTick = tick + rescanIntervalTicks.get();
+            rescanFindings();
+            saveSnapshot();
+            rebuildCollectors();
         }
         scanNewChunks();
     }
 
     private void resetState() {
+        if (!findings.isEmpty()) {
+            saveSnapshot();
+        }
         if (!findings.isEmpty() || !scannedChunks.isEmpty()) {
             findings.clear();
             scannedChunks.clear();
@@ -118,6 +160,76 @@ public class NetherRoofESP extends BaseModule {
             tracerCollector.clear();
         }
         currentDimension = null;
+    }
+
+    // ---------------------------------------------------------------
+    // persisted baseline: "<server>|<chunkKey>" -> last saved block count.
+    // A positive delta against it is the strongest "someone is building"
+    // signal available from the client side, even across game sessions.
+    // ---------------------------------------------------------------
+    private void ensureBaselineLoaded() {
+        if (baselineLoaded) {
+            return;
+        }
+        baselineLoaded = true;
+        savedBaseline.clear();
+        var entry = mc.getCurrentServerEntry();
+        baselinePrefix = entry != null ? entry.address : "singleplayer";
+        snapshotStorage.read(NbtCompound.CODEC).result().ifPresent(compound -> {
+            for (String key : compound.getKeys()) {
+                savedBaseline.put(key, compound.getInt(key).orElse(0));
+            }
+        });
+    }
+
+    private void saveSnapshot() {
+        NbtCompound compound = new NbtCompound();
+        for (Map.Entry<Long, Finding> entry : findings.entrySet()) {
+            compound.putInt(
+                    baselinePrefix + "|" + entry.getKey(), entry.getValue().blockCount());
+        }
+        if (!compound.isEmpty()) {
+            // keep baselines of chunks that fell out of range, drop none
+            for (Map.Entry<String, Integer> entry : savedBaseline.entrySet()) {
+                if (!compound.contains(entry.getKey())) {
+                    compound.putInt(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+        snapshotStorage.write(compound, NbtOps.INSTANCE);
+        for (String key : compound.getKeys()) {
+            savedBaseline.put(key, compound.getInt(key).orElse(0));
+        }
+    }
+
+    /** entity activity: other players, dropped items or minecarts mean "lived in" */
+    private void refreshActivity() {
+        chunkActivity.clear();
+        for (Entity entity : mc.world.getEntities()) {
+            if (entity == mc.player) {
+                continue;
+            }
+            boolean alive = entity instanceof PlayerEntity
+                    || entity instanceof net.minecraft.entity.ItemEntity
+                    || entity instanceof AbstractMinecartEntity;
+            if (!alive) {
+                continue;
+            }
+            chunkActivity.merge(entity.getChunkPos().toLong(), Boolean.TRUE, Boolean::logicalOr);
+        }
+    }
+
+    private void rescanFindings() {
+        for (Long key : new HashSet<>(findings.keySet())) {
+            ChunkPos pos = new ChunkPos(key);
+            if (!mc.world.getChunkManager().isChunkLoaded(pos.x, pos.z)) {
+                continue;
+            }
+            WorldChunk chunk = mc.world.getChunkManager().getWorldChunk(pos.x, pos.z);
+            if (chunk != null) {
+                scanChunk(chunk, key);
+            }
+        }
     }
 
     private void scanNewChunks() {
@@ -201,7 +313,10 @@ public class NetherRoofESP extends BaseModule {
             return;
         }
         Vec3d center = new Vec3d((double) sumX / count, (double) sumY / count, (double) sumZ / count);
-        findings.put(key, new Finding(center, count, portal, chest));
+        Integer baseline = savedBaseline.get(baselinePrefix + "|" + key);
+        int delta = baseline != null ? count - baseline : 0;
+        boolean active = chunkActivity.getOrDefault(key, Boolean.FALSE);
+        findings.put(key, new Finding(center, count, portal, chest, delta, active));
         rebuildCollectors();
     }
 
@@ -224,10 +339,27 @@ public class NetherRoofESP extends BaseModule {
             if (showTracers.get()) {
                 tracerCollector.submit(center, ColorUtils.withAlphaInt(rgb, 200));
             }
-            String flags = (finding.portal() ? " 传送门" : "") + (finding.chest() ? " 箱子" : "");
+            StringBuilder label = new StringBuilder("%d格".formatted(finding.blockCount()));
+            if (finding.delta() > 0) {
+                label.append(" +").append(finding.delta());
+            }
+            if (finding.active()) {
+                label.append(" 活跃");
+            }
+            if (finding.portal()) {
+                label.append(" 传送门");
+                // nether -> overworld coordinate link (1:8), the fastest way to
+                // check the other side for a matching base entrance
+                label.append("(主世界%d,%d)"
+                        .formatted(
+                                net.minecraft.util.math.MathHelper.floor(center.x) * 8,
+                                net.minecraft.util.math.MathHelper.floor(center.z) * 8));
+            }
+            if (finding.chest()) {
+                label.append(" 箱子");
+            }
             textCollector.submit(
-                    new RenderElements.Text(
-                            Text.literal("%d格%s".formatted(finding.blockCount(), flags)), center.add(0, 2.5D, 0), 1.0F),
+                    new RenderElements.Text(Text.literal(label.toString()), center.add(0, 2.5D, 0), 1.0F),
                     ColorUtils.withAlphaInt(rgb, 255));
         }
     }
