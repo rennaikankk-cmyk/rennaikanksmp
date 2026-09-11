@@ -501,6 +501,9 @@ public class RenderTasks {
     private static HoleESP holeESP;
 
     @Getter
+    private static NetherRoofESP netherRoofESP;
+
+    @Getter
     private static DamageDisplay damageDisplay;
 
     @Getter
@@ -573,6 +576,7 @@ public class RenderTasks {
         renderExtra = new RenderExtra().register(m);
         noRender = new NoRender().register(m);
         noSound = new NoSound().register(m);
+        netherRoofESP = new NetherRoofESP().register(m);
         entityLog = new EntityLog().register(m);
         entityESP = new EntityESP().register(m);
         explosiveESP = new ExplosiveESP().register(m);
