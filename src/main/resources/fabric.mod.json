@@ -1,0 +1,33 @@
+{
+	"schemaVersion": 1,
+	"id": "rennaikanksmp",
+	"version": "${version}",
+	"name": "RennaikankSMP",
+	"description": "Utility client for survival, slimefun and anarchy servers. Fork of SlimefunHelper (CC0) with a modernized ClickGui and ElytraBotV2.",
+	"authors": [
+		"matl114",
+		"rennaikankk-cmyk"
+	],
+	"contact": {
+		"homepage": "https://github.com/rennaikankk-cmyk/rennaikanksmp",
+		"sources": "https://github.com/rennaikankk-cmyk/rennaikanksmp"
+	},
+	"license": "CC0-1.0",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"me.matl114.SlimefunHelper"
+		]
+	},
+	"mixins": [
+		"slimefunhelper.mixins.json",
+		"slimefunhelper.mixins.hooks.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.15.1",
+		"minecraft": "${minecraft_version}",
+		"java": ">=21",
+		"fabric-api": "*"
+	},
+	"accessWidener":"overrideList.accesswidener"
+}

@@ -1,0 +1,717 @@
+package me.matl114.hacks.api;
+
+import it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet;
+import it.unimi.dsi.fastutil.objects.ReferenceSet;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
+import java.util.stream.Stream;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.experimental.Accessors;
+import me.matl114.commands.MainCommand;
+import me.matl114.events.channels.ListenerPoint;
+import me.matl114.gui.basic.*;
+import me.matl114.gui.complex.config.DefaultedKeyValueInputWidget;
+import me.matl114.gui.elements.ButtonElement;
+import me.matl114.gui.elements.ColorLabelTextElement;
+import me.matl114.hacks.modules.task.ClickGui;
+import me.matl114.hacks.utils.HotKeyUtils;
+import me.matl114.hacks.utils.config.StringFormat;
+import me.matl114.managers.*;
+import me.matl114.managers.config.*;
+import me.matl114.managers.input.IHotKey;
+import me.matl114.managers.input.MultiKeyBind;
+import me.matl114.managers.input.SimpleHotKey;
+import me.matl114.managers.input.SimpleInputManager;
+import me.matl114.utils.ChatUtils;
+import me.matl114.utils.Debug;
+import me.matl114.utils.commands.commandGroup.AbstractMainCommand;
+import me.matl114.utils.config.AttrKeyValue;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.text.Text;
+import org.jetbrains.annotations.MustBeInvokedByOverriders;
+import org.jetbrains.annotations.Nullable;
+
+public abstract class BaseModule implements ModuleListProvider {
+    protected static final MinecraftClient mc = MinecraftClient.getInstance();
+
+    @Getter
+    protected String name;
+
+    public BaseModule(String name) {
+        this.name = name;
+        ensureInstanceSet();
+    }
+
+    private void ensureInstanceSet() {
+        try {
+            Field field = getClass().getField("INSTANCE");
+            if (Modifier.isStatic(field.getModifiers())
+                    && !Modifier.isFinal(field.getModifiers())
+                    && field.getType() == getClass()) {
+                field.setAccessible(true);
+                field.set(null, this);
+            }
+        } catch (Throwable e) {
+        }
+    }
+
+    protected boolean lastActiveFlag = false;
+    protected boolean removed = false;
+
+    public final boolean hasBindFlag() {
+        return bindedFlag != null;
+    }
+
+    @Nullable
+    public final FlagRef getBindFlag() {
+        return bindedFlag;
+    }
+
+    public boolean isActive() {
+        return lastActiveFlag;
+    }
+
+    public boolean isRemoved() {
+        return removed;
+    }
+
+    private FlagRef bindedFlag = null;
+    private Consumer<Boolean> bindListener;
+    private final ReferenceSet<Object> registerReasons = new ReferenceOpenHashSet<>();
+    protected static final String REASON_BIND = "module binding";
+    protected static final String REASON_LISTENER = "event listener";
+    protected static final String REASON_VALIDATOR = "config validator";
+    protected static final String REASON_UPDATE_LISTENER = "config update listener";
+    protected static final String REASON_COMMAND = "command bootstrap";
+    protected static final String REASON_CUSTOM = "custom wrapper";
+
+    public static ModulePath makePath(Config config, String c) {
+        return new ModulePath(config, c.split("\\."));
+    }
+
+    public static String[] makePath(String c) {
+        return c.split("\\.");
+    }
+
+    protected <T> T registerReason(T value, String reason) {
+        registerReasons.add(value);
+        return value;
+    }
+    // bind the Module's status to the Flag
+    public final void bindFlag(FlagRef flagRef) {
+        if (bindedFlag != null) {
+            removeBindFlag();
+        }
+        bindedFlag = flagRef;
+        if (flagRef != null) {
+            bindListener = registerReason(this::updateActiveStatus, REASON_BIND);
+            flagRef.addUpdateListenerWithUpdate(bindListener);
+        }
+    }
+
+    private void removeBindFlag() {
+        if (bindedFlag != null) {
+            bindedFlag.removeUpdateListener(s -> {
+                return bindListener == s;
+            });
+            bindedFlag = null;
+        }
+    }
+
+    protected static StringFormat logFormat =
+            new StringFormat(List.of("module_name", "message"), "&c[{module_name}] &f{message}", true);
+
+    public void logI18N(String translationKey, Object... objects) {
+        log(Text.translatable(translationKey, objects));
+    }
+
+    public void logI18NSub(String subModule, String translationKey, Object... objects) {
+        logSub(subModule, Text.translatable(translationKey, objects));
+    }
+
+    public void log(String string) {
+        Debug.chat(logFormat.formatText(getName(), string));
+    }
+
+    public void log(Text text) {
+        Debug.chat(logFormat.formatText(getName(), text));
+    }
+
+    public void logSub(String subModule, String string) {
+        Debug.chat(logFormat.formatText(subModule, string));
+    }
+
+    public void logSub(String subModule, Text text) {
+        Debug.chat(logFormat.formatText(subModule, text));
+    }
+
+    private void removeBindHotkey() {
+        registeredModuleEntry.clear();
+    }
+
+    // this is called via the bindedFlag
+    protected final void updateActiveStatus(boolean active) {
+        if (lastActiveFlag != active) {
+            lastActiveFlag = active;
+            if (active) {
+                onEnableModule();
+            } else {
+                onDisableModule();
+            }
+        }
+    }
+
+    protected static Map<ModulePath, ModulePath> portPaths = new ConcurrentHashMap<>();
+
+    public static void portConfigs(ModulePath oldPath, ModulePath newPath) {
+        portPaths.put(oldPath, newPath);
+        var unknown = oldPath.getConfig().get(oldPath.toPath());
+        if (unknown != null) {
+            oldPath.getConfig().setValueNoNew(null, oldPath.toPath());
+            newPath.getConfig().setValueNoNew(unknown, newPath.toPath());
+        }
+    }
+
+    public static boolean checkNull() {
+        return mc.player == null || mc.world == null;
+    }
+    // module enable and disable
+    // note that it might be called outside the game, so you have check basic vars
+    @MustBeInvokedByOverriders
+    public void onEnableModule() {}
+
+    @MustBeInvokedByOverriders
+    public void onDisableModule() {}
+
+    // this is managed by ModuleManager
+    @MustBeInvokedByOverriders
+    public void onCreate() {
+        registerAll();
+    }
+
+    @MustBeInvokedByOverriders
+    public void onRemove() {
+        if (removed) {
+            throw new IllegalStateException("Removed twice");
+        }
+        removeBindFlag();
+        removeBindHotkey();
+        unregisterAll();
+        manager = null;
+        removed = true;
+    }
+
+    private ModuleManager manager;
+
+    public ModuleManager getModuleManager() {
+        return manager;
+    }
+
+    // this is for convenience
+    @MustBeInvokedByOverriders
+    public final <T extends BaseModule> T register(ModuleManager manager) {
+        manager.registerModule(this);
+        this.manager = manager;
+        return (T) this;
+    }
+    // this is invoke when sb tries to remove this BaseModule out of the specific ModuleGroup
+    @MustBeInvokedByOverriders
+    public final void unregister(ModuleManager manager) {
+        manager.unregisterModule(this);
+    }
+    // this is also for convenience
+    private final Set<ListenerPoint<?>> registeredPoints = new LinkedHashSet<>();
+    // todo; make this hand-register
+    private final List<ModuleEntry> registeredModuleEntry = new ArrayList<>();
+
+    public Stream<ModuleEntry> getModuleEntries() {
+        return registeredModuleEntry.stream();
+    }
+
+    public <W> void registerListener(ListenerPoint<W> listener, Consumer<W> handler) {
+        registerListener(listener, handler, 0);
+    }
+
+    public <W> void registerListener(ListenerPoint<W> listener, Predicate<W> handler) {
+        registerListener(listener, handler, 0);
+    }
+
+    public <W> void registerListener(ListenerPoint<W> listener, Consumer<W> handler, int p) {
+        listener.registerHandler(registerReason(handler, REASON_LISTENER), p);
+        registeredPoints.add(listener);
+    }
+
+    public <W> void registerListener(ListenerPoint<W> listener, Predicate<W> handler, int p) {
+        listener.registerHandler(registerReason(handler, REASON_LISTENER), p);
+        registeredPoints.add(listener);
+    }
+
+    public void registerCommandBootstrap(Consumer<MainCommand> handler) {
+        MainCommand.Bootstrap bootstrap = registerReason(handler::accept, REASON_COMMAND);
+        MainCommand.registerCommandBootstrap(bootstrap);
+    }
+
+    public void registerCommand(Supplier<AbstractMainCommand> factory) {
+        registerCommandBootstrap(s -> s.registerAsCommand(factory.get()));
+    }
+
+    public void registerAsSubCommand(String name, Supplier<AbstractMainCommand> factory) {
+        registerCommandBootstrap(s -> s.registerAsSubCommand(name, factory.get()));
+    }
+    // you should put listeners here
+    @MustBeInvokedByOverriders
+    public void registerAll() {}
+
+    // listeners will be automatically unregistered in onRemove
+    public <W> void unregisterAll() {
+        registeredPoints.forEach(s -> s.unregisterHandler(this::isOwner));
+        registeredPoints.clear();
+        registeredConfigRefs.forEach(s -> s.ref.removeUpdateListener(this::isOwner));
+        registeredConfigRefs.forEach(s -> s.ref.removeValidator(this::isOwner));
+        registeredConfigRefs.forEach(s -> {
+            if (s.ref instanceof ListRef list) {
+                list.removeElementValidator(this::isOwner);
+            }
+        });
+        registeredConfigRefs.clear();
+        registeredConfigEditableRefs.clear();
+        registeredHotkeys.forEach(s -> s.setInputHandler(SimpleHotKey.InputHandler.EMPTY));
+        registeredHotkeys.clear();
+        MainCommand.unregisterCommandBootstrap(this::isOwner);
+        registerReasons.clear();
+    }
+
+    private final List<WrapperConfigRef<?>> registeredConfigRefs = new ArrayList<>();
+    private final List<WrapperConfigRef<?>> registeredConfigEditableRefs = new ArrayList<>();
+
+    public final List<WrapperConfigRef<?>> getEditableConfig() {
+        return Collections.unmodifiableList(registeredConfigEditableRefs);
+    }
+
+    public boolean hasEditableConfig() {
+        return !registeredConfigEditableRefs.isEmpty();
+    }
+
+    Boolean showInGui;
+
+    public boolean shouldShowInGui() {
+        if (showInGui == null) {
+            if (hasEditableConfig()) {
+                showInGui = true;
+                return true;
+            }
+            Class<?> clazz = this.getClass();
+            try {
+                Method method = clazz.getMethod("addCustomWidgets", Consumer.class, int.class, int.class, int.class);
+                if (method.getDeclaringClass() != BaseModule.class) {
+                    showInGui = true;
+                    return true;
+                }
+            } catch (Throwable e) {
+            }
+            showInGui = false;
+        }
+        return showInGui;
+    }
+
+    private final Set<SimpleHotKey> registeredHotkeys = new LinkedHashSet<>();
+
+    public <T> WrapperSettingBuilder<T> builder(Config config, Class<T> type) {
+        return new WrapperSettingBuilder<>(config.asRef(), config, type, this);
+    }
+
+    public <T> WrapperSettingBuilder<T> builder(Config config, String[] path, Class<T> type) {
+        return new WrapperSettingBuilder<>(config.asRef(), config, type, this).path(path);
+    }
+
+    public <T> WrapperSettingBuilder<T> builder(ModulePath path, Class<T> type) {
+        return builder(path.getConfig(), path.toPath(), type);
+    }
+
+    public WrapperSettingBuilder<Boolean> flagBuilder(Config config, String... path) {
+        return builder(config, Boolean.class).path(path).defaultValue(false);
+    }
+
+    public WrapperSettingBuilder<Boolean> flagBuilder(ModulePath path) {
+        return flagBuilder(path.getConfig(), path.toPath());
+    }
+
+    public WrapperSettingBuilder<Integer> intBuilder(ModulePath path) {
+        return builder(path.getConfig(), path.toPath(), IntRef.TYPE);
+    }
+
+    public WrapperSettingBuilder<Double> doubleBuilder(ModulePath path) {
+        return builder(path.getConfig(), path.toPath(), DoubleRef.TYPE);
+    }
+
+    public WrapperSettingBuilder<MultiKeyBind> hotkey(Config config, String... path) {
+        return builder(config, MultiKeyBind.class).path(path);
+    }
+
+    public WrapperSettingBuilder<MultiKeyBind> hotkey(ModulePath path) {
+        return hotkey(path.getConfig(), path.toPath());
+    }
+
+    public WrapperSettingBuilder<MultiKeyBind> hotkey(Config config, String[] path, MultiKeyBind defaultValue) {
+        return builder(config, MultiKeyBind.class).path(path).defaultValue(defaultValue);
+    }
+
+    public WrapperSettingBuilder<MultiKeyBind> hotkey(ModulePath path, MultiKeyBind defaultValue) {
+        return hotkey(path.getConfig(), path.toPath(), defaultValue);
+    }
+
+    public WrapperSettingBuilder<MultiKeyBind> toggleConfigHotkey(
+            Config config, String[] path, MultiKeyBind defaultValue) {
+        return builder(config, MultiKeyBind.class)
+                .path(path)
+                .defaultValue(defaultValue)
+                .registerHotkey(HotKeyUtils.getToggleHandler(Configs.TOGGLE_CONFIG, path));
+    }
+
+    public WrapperSettingBuilder<MultiKeyBind> moduleEntry(
+            ModulePath hotkeyPath, MultiKeyBind defaultValue, ModulePath togglePath) {
+        return moduleEntry(hotkeyPath.getConfig(), hotkeyPath.toPath(), defaultValue, togglePath.toPath());
+    }
+
+    public WrapperSettingBuilder<MultiKeyBind> moduleEntry(
+            ModulePath hotkeyPath, MultiKeyBind defaultValue, ModulePath togglePath, Supplier<Text> descriptor) {
+        return moduleEntry(hotkeyPath.getConfig(), hotkeyPath.toPath(), defaultValue, togglePath.toPath(), descriptor);
+    }
+
+    public WrapperSettingBuilder<MultiKeyBind> moduleEntry(
+            Config config, String[] hotkeyPath, MultiKeyBind defaultValue, String[] togglePath) {
+        return new WrapperModuleSettingBuilder(
+                        config.asRef(), config, this, new ModuleEntry(config, togglePath, hotkeyPath))
+                .defaultValue(defaultValue)
+                .registerHotkey(HotKeyUtils.getToggleHandler(config, togglePath))
+                .registerModuleEntry();
+    }
+
+    public WrapperSettingBuilder<MultiKeyBind> moduleEntry(
+            Config config,
+            String[] hotkeyPath,
+            MultiKeyBind defaultValue,
+            String[] togglePath,
+            Supplier<Text> descriptor) {
+        return new WrapperModuleSettingBuilder(
+                        config.asRef(),
+                        config,
+                        this,
+                        new MetaDataModuleEntry(config, togglePath, hotkeyPath, descriptor))
+                .defaultValue(defaultValue)
+                .registerHotkey(HotKeyUtils.getToggleHandler(config, togglePath))
+                .registerModuleEntry();
+    }
+
+    public WrapperSettingBuilder<MultiKeyBind> toggleHotkey(
+            Config config, String[] path, MultiKeyBind defaultValue, String[] togglePath) {
+        return new WrapperSettingBuilder<>(config.asRef(), config, KeyBindRef.TYPE, this)
+                .path(path)
+                .defaultValue(defaultValue)
+                .registerHotkey(HotKeyUtils.getToggleHandler(config, togglePath));
+    }
+
+    public WrapperSettingBuilder<MultiKeyBind> toggleHotkey(
+            ModulePath path, MultiKeyBind defaultValue, ModulePath togglePath) {
+        return toggleHotkey(path.getConfig(), path.toPath(), defaultValue, togglePath.toPath());
+    }
+
+    public IHotKey getHotkey(String... path) {
+        return SimpleInputManager.getInstance().getHotkey(String.join(".", path));
+    }
+
+    //    public <T extends Ref<?>> T registerConfig(T ref, String[] path) {
+    //        registerConfigWrapper(new WrapperConfigRef(ref, path));
+    //        return ref;
+    //    }
+
+    private <T> void registerConfigWrapper(WrapperConfigRef<T> ref) {
+        registeredConfigRefs.removeIf(ref::isSamePath);
+        registeredConfigRefs.add(ref);
+        if (ref.isEditable()) {
+            registeredConfigEditableRefs.removeIf(ref::isSamePath);
+            registeredConfigEditableRefs.add(ref);
+        }
+    }
+
+    public void registerHotkey(SimpleHotKey register) {
+        registeredHotkeys.add(register);
+    }
+
+    // for removal convenience
+    protected <W> boolean isOwner(Object c) {
+        return registerReasons.contains(c);
+    }
+
+    protected <W> Consumer<W> wrap(Consumer<W> consumer) {
+        return registerReason(consumer, REASON_CUSTOM);
+    }
+
+    protected <W> Predicate<W> wrap(Predicate<W> predicate) {
+        return registerReason(predicate, REASON_CUSTOM);
+    }
+
+    // todo: remake config screen
+
+    public void addCustomWidgets(Consumer<DrawableWidget> acceptor, int dx, int dy, int dblank) {}
+
+    protected static final int indexWidth = 140;
+    protected static final int blankWidth = 10;
+
+    public DrawableWidget createRefKeyLabel(Supplier<Text> text, Supplier<List<Text>> tooltips, int dx, int dy) {
+        return ExecutableWidget.instance(0, 0, dx, dy)
+                .setElementHandler(new ColorLabelTextElement(
+                                el -> text.get(),
+                                () -> ClickGui.INSTANCE.textColor.get().withAlpha(255),
+                                () -> ClickGui.INSTANCE.configColor.get().withAlpha(255))
+                        .withTooltips(TooltipHandler.of(tooltips)));
+    }
+
+    public DrawableWidget createTitleLabel(String translationKey, int x, int y, int dx, int dy) {
+        return DisplayWidget.instance(x, y, dx, dy)
+                .setRenderHandler(new ColorLabelTextElement(
+                                TextProvider.of(Text.translatable(translationKey)),
+                                () -> ClickGui.INSTANCE.textColor.get().withAlpha(255),
+                                () -> ClickGui.INSTANCE.moduleListColor.get().withAlpha(255))
+                        .withTooltips(TooltipHandler.of(
+                                ChatUtils.parseTooltipsTranslation(translationKey + ".tooltips", ""))));
+    }
+
+    public DrawableWidget createExecuteButton(
+            String translationKey, ButtonAction action, int x, int y, int dx, int dy) {
+        return ExecutableWidget.instance(x, y, dx, dy)
+                .setElementHandler(new ButtonElement(TextProvider.of(Text.translatable(translationKey)), action)
+                        .withTooltips(TooltipHandler.of(
+                                ChatUtils.parseTooltipsTranslation(translationKey + ".tooltips", ""))));
+    }
+
+    public DrawableWidget createRefEditor(String path, Ref<?> ref, int x, int y, int dx, int dy) {
+        return new DefaultedKeyValueInputWidget(
+                x, y, dx, dy, indexWidth, blankWidth, dx - indexWidth - blankWidth, ref, path) {
+            @Override
+            public DrawableWidget createKeyLabel() {
+                return createRefKeyLabel(this::getTranslationName, this::getTooltips, dkey, dy);
+            }
+        };
+    }
+
+    public static Text getModuleMeta(Enum<?> enumReff) {
+        ConfigEnum configEnum = (ConfigEnum) enumReff;
+        return Text.translatable("module-meta." + configEnum.getConfigEnumType().replace("_", "-") + "."
+                + enumReff.name().toLowerCase(Locale.ROOT));
+    }
+
+    public static Supplier<Text> moduleMeta(Supplier<EnumRef<?>> enumReff) {
+        return new Supplier<Text>() {
+            String suffix;
+
+            @Override
+            public Text get() {
+                if (suffix == null) {
+                    ConfigEnum configEnum = enumReff.get().get();
+                    suffix = "module-meta." + configEnum.getConfigEnumType().replace("_", "-") + ".";
+                }
+                return Text.translatable(
+                        suffix + enumReff.get().get().cast().name().toLowerCase(Locale.ROOT));
+            }
+        };
+    }
+
+    // named consumer to mark who's owner
+    @Getter
+    @Setter
+    @Accessors(fluent = true)
+    public static class WrapperConfigRef<T> {
+        Ref<T> ref;
+        static BooleanSupplier ALWAYS_TRUE = () -> true;
+        static BooleanSupplier ALWAYS_FALSE = () -> false;
+        BooleanSupplier showPredicate = ALWAYS_TRUE;
+        Config config;
+        String[] path;
+        String keyName;
+
+        @Getter
+        boolean experimental = false;
+
+        public WrapperConfigRef(Ref<T> ref, Config config, String[] path) {
+            this.ref = Objects.requireNonNull(ref);
+            this.path = path;
+            this.config = config;
+            this.keyName = String.join(".", path);
+        }
+
+        public boolean shouldShow() {
+            return showPredicate.getAsBoolean();
+        }
+
+        public void hideConfig() {
+            showPredicate = ALWAYS_FALSE;
+        }
+
+        public void showConfig() {
+            showPredicate = ALWAYS_TRUE;
+        }
+
+        public void addShowPredicate(BooleanSupplier supplier) {
+            if (showPredicate == ALWAYS_TRUE) {
+                showPredicate = supplier;
+            } else if (showPredicate == ALWAYS_FALSE) {
+                return;
+            } else {
+                showPredicate = () -> showPredicate.getAsBoolean() && supplier.getAsBoolean();
+            }
+        }
+
+        public boolean isEditable() {
+            return this.config.getRegistryKey() != null;
+        }
+
+        public boolean isSamePath(WrapperConfigRef<?> ref) {
+            return config == ref.config && Arrays.equals(path, ref.path);
+        }
+
+        public AttrKeyValue<T> createKeyValue() {
+            return this.ref.createKeyValue(this.keyName);
+        }
+    }
+
+    public static class WrapperSettingBuilder<W> extends Config.SettingBuilder<W> {
+        BaseModule module;
+        WrapperConfigRef<W> wrapperConfig;
+        SimpleHotKey hotkey;
+
+        private WrapperConfigRef<W> getWrapper() {
+            if (wrapperConfig == null) {
+                wrapperConfig = new WrapperConfigRef<>(getRef(), this.rootConfig, this.path);
+            }
+            return wrapperConfig;
+        }
+
+        public WrapperSettingBuilder(MapRef ref, Config rootConfig, Class<W> clazz, BaseModule module) {
+            super(ref, rootConfig, clazz);
+            this.module = module;
+        }
+
+        public WrapperSettingBuilder<W> listValidator(Predicate<String> va) {
+            if (getRef() instanceof ListRef lsR) {
+                lsR.addElementValidator(this.module.registerReason(va, REASON_VALIDATOR));
+            } else {
+                throw new UnsupportedOperationException("Not a list");
+            }
+            return this;
+        }
+
+        public WrapperSettingBuilder<W> validator(Predicate<W> va) {
+            super.validator(this.module.registerReason(va, REASON_VALIDATOR));
+            return this;
+        }
+
+        public WrapperSettingBuilder<W> updateListener(Consumer<W> va) {
+            super.updateListener(this.module.registerReason(va, REASON_UPDATE_LISTENER));
+            return this;
+        }
+
+        @Override
+        public WrapperSettingBuilder<W> path(String... path) {
+            return (WrapperSettingBuilder<W>) super.path(path);
+        }
+
+        @Override
+        public WrapperSettingBuilder<W> defaultValue(W val) {
+            return (WrapperSettingBuilder<W>) super.defaultValue(val);
+        }
+
+        public WrapperSettingBuilder<W> registerHotkey(SimpleHotKey.InputHandler path) {
+            var re = (WrapperSettingBuilder<W>) super.registerHotkey(path);
+            this.hotkey = (SimpleHotKey) SimpleInputManager.getInstance().getHotkey(String.join(".", this.path));
+            return re;
+        }
+
+        @Override
+        public <W1 extends Ref<W>> WrapperSettingBuilder<W> apply(Consumer<W1> va) {
+            return (WrapperSettingBuilder<W>) super.apply(va);
+        }
+
+        // for gui building
+        // todo: create it later
+        public WrapperSettingBuilder<W> hideConfig() {
+            addPost(() -> {
+                getWrapper().hideConfig();
+            });
+            return this;
+        }
+
+        public WrapperSettingBuilder<W> showConfig() {
+            addPost(() -> {
+                getWrapper().showConfig();
+            });
+            return this;
+        }
+
+        public WrapperSettingBuilder<W> show(BooleanSupplier supplier) {
+            addPost(() -> {
+                getWrapper().addShowPredicate(supplier);
+            });
+            return this;
+        }
+
+        public WrapperSettingBuilder<W> experimental() {
+            addPost(() -> {
+                getWrapper().experimental(true);
+            });
+            return this;
+        }
+
+        public WrapperSettingBuilder<W> registerModuleEntry() {
+            throw new UnsupportedOperationException();
+        }
+        //
+
+        @Override
+        public <W1 extends Ref<W>> W1 build() {
+            W1 re = super.build();
+            this.module.registerConfigWrapper(this.getWrapper());
+            if (this.hotkey != null) {
+                this.module.registerHotkey(this.hotkey);
+            }
+            return re;
+        }
+    }
+
+    public static class WrapperModuleSettingBuilder extends WrapperSettingBuilder<MultiKeyBind> {
+        ModuleEntry moduleEntry;
+
+        public WrapperModuleSettingBuilder(MapRef ref, Config rootConfig, BaseModule module, ModuleEntry moduleEntry) {
+            super(ref, rootConfig, KeyBindRef.TYPE, module);
+            this.moduleEntry = moduleEntry;
+            this.path(moduleEntry.hotkeyPath);
+        }
+
+        boolean registered = false;
+
+        public WrapperSettingBuilder<MultiKeyBind> registerModuleEntry() {
+            registered = true;
+            return this;
+        }
+
+        public <W2 extends Ref<MultiKeyBind>> W2 build() {
+            W2 val = super.build();
+            if (registered) {
+                this.module.registeredModuleEntry.add(this.moduleEntry);
+            }
+            return val;
+        }
+    }
+
+    public <T> T cast() {
+        return (T) this;
+    }
+}

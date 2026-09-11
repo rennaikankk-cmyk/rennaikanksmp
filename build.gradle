@@ -1,0 +1,233 @@
+plugins {
+	id 'fabric-loom' version "1.15-SNAPSHOT"
+	id 'maven-publish'
+	id 'com.gradleup.shadow' version "9.0.0-beta13"
+	id "com.diffplug.spotless" version "8.1.0"
+}
+loom {
+	accessWidenerPath = file("src/main/resources/overrideList.accesswidener")
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+	archivesName = project.archives_base_name
+}
+
+repositories {
+	gradlePluginPortal()
+	mavenLocal()
+	mavenCentral()
+
+	maven {
+		url 'https://maven.aliyun.com/nexus/content/groups/public'
+	}
+	maven {
+		url 'https://repository.hanbings.io/proxy'
+	}
+	maven {
+		url 'https://jitpack.io'
+	}
+	maven {
+		url 'https://hub.spigotmc.org/nexus/content/repositories/snapshots'
+	}
+	maven {
+		url "https://maven.meteordev.org/snapshots"
+	}
+	maven {
+		url = "https://maven.meteordev.org/releases"
+	}
+}
+sourceSets {
+	stubs{
+		compileClasspath += configurations.runtimeClasspath
+	}
+}
+//apply plugin: 'com.gradleup.shadow'
+//apply plugin: 'java'
+
+fabricApi {
+	configureDataGeneration()
+}
+configurations {
+	//buildtoolsImplementation.extendsFrom(compileClasspath)
+	runtimeClasspath.extendsFrom implementation
+}
+
+dependencies {
+	// To change the versions see the gradle.properties file
+	minecraft ("com.mojang:minecraft:${project.minecraft_version}"){
+		transitive = false
+	}
+	//mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+	mappings files("mapping/yarn-1.21.11+build-special-v5.local-v2.jar")
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+	modCompileOnly files("libs/baritone-meteor-1.21.11.jar")
+//	modCompileOnly files("libs/xaeroworldmap-fabric-1.21.11-1.41.0.jar")
+//	modCompileOnly files("libs/xaerominimap-fabric-1.21.11-26.1.0.jar")
+//	modCompileOnly files("libs/XaeroPlus-2.32.1+fabric-1.21.11-WM1.41.0-MM26.1.0.jar")
+	modCompileOnly "meteordevelopment:meteor-client:${project.meteor_version}"
+
+	// bridge
+	compileOnly sourceSets.stubs.output
+	// api
+	api 'com.github.houbb:pinyin:0.4.0'  // 拼音
+	api 'io.netty:netty-handler-proxy:4.1.97.Final' // proxy
+	api 'org.yaml:snakeyaml:1.30' // yml
+
+	// annotations
+	compileOnly 'org.projectlombok:lombok:1.18.30'
+	compileOnly 'com.google.code.findbugs:jsr305:3.0.2'
+	annotationProcessor 'org.projectlombok:lombok:1.18.30'
+
+
+}
+
+shadowJar {
+	minimize()
+	archiveFileName = "${project.properties["archives_base_name"]}-${project.version}-shadow-raw.jar"
+	configurations = [project.configurations.runtimeClasspath]
+	dependencies {
+		include dependency('com.github.houbb:.*')
+		include dependency('io.netty:netty-handler.*:.*')
+		include dependency('io.netty:netty-codec.*:.*')
+		include dependency('org.yaml:snakeyaml:.*')
+		exclude "mappings/mappings.tiny"
+	}
+	finalizedBy(tasks.remapJar)
+}
+
+spotless {
+	lineEndings = 'WINDOWS'
+
+	java {
+		// 使用 PalantirJavaFormat（更简单，不需要配置文件）
+		palantirJavaFormat('2.38.0')
+				.style('PALANTIR')
+
+		removeUnusedImports()
+		trimTrailingWhitespace()
+		endWithNewline()
+	}
+}
+
+//loom {
+//	// 禁用自动下载
+//	skipDownloadAssets = true
+//	skipDownloadMcLibraries = true
+//
+////	// 或者设置自定义缓存路径
+////	customMinecraftCache = file("${project.gradle.gradleUserHomeDir}/caches/fabric-loom")
+//}
+
+remapJar {
+	dependsOn shadowJar
+	inputFile = shadowJar.archiveFile.get().asFile
+	archiveFileName = "${project.properties["archives_base_name"]}-${project.version}.jar"
+}
+
+processResources {
+	inputs.property "version", project.version
+	inputs.property "minecraft_version", project.minecraft_version
+
+	filesMatching("fabric.mod.json") {
+		expand (
+			"version": project.version,
+			"minecraft_version": project.minecraft_version
+		)
+
+
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 21
+	options.annotationProcessorPath = configurations.annotationProcessor
+}
+
+java {
+	withSourcesJar()
+
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
+}
+//afterEvaluate {
+//
+//	configurations.runtimeClasspath.forEach { file ->
+//
+//		if (file.name.startsWith("sponge-mixin")) {
+//
+//			tasks.named("runClient", JavaExec) {
+//
+//				jvmArgs("-javaagent:${file.absolutePath}")
+//
+//			}
+//
+//		}
+//
+//	}
+//
+//}
+
+jar {
+	from("LICENSE") {
+		rename { "${it}_${project.base.archivesName.get()}"}
+	}
+
+}
+tasks.named("runClient", JavaExec) {
+	jvmArgs("-XX:+AllowEnhancedClassRedefinition", "-XX:-OmitStackTraceInFastThrow"
+			, "-Dmixin.debug.export=true"
+			, "-Xmx6G", "-Xms3G"
+	)
+	systemProperties = [
+			"https.proxyHost": "127.0.0.1",
+			"https.proxyPort": "7890",
+			"http.proxyHost": "127.0.0.1",
+			"http.proxyPort": "7890"
+	]
+}
+//
+//tasks.named('downloadAssets', JavaExec) {
+//	// 设置任务级别的系统属性（不推荐，可能不生效）
+//	systemProperties = [
+//			'https.proxyHost': '127.0.0.1',
+//			'https.proxyPort': '7890',
+//			'http.proxyHost': '127.0.0.1',
+//			'http.proxyPort': '7890'
+//	]
+//}
+//
+//tasks.named("build"){
+//	//why can not it be directly accessed, I don't understand
+//	//shit gradle
+//	systemProperties = [
+//			"https.proxyHost": "127.0.0.1",
+//			"https.proxyPort": "7890",
+//			"http.proxyHost": "127.0.0.1",
+//			"http.proxyPort": "7890"
+//	]
+//}
+
+
+build.dependsOn spotlessApply
+
+// configure the maven publication
+publishing {
+	publications {
+		create("mavenJava", MavenPublication) {
+			artifactId = project.archives_base_name
+			from components.java
+		}
+	}
+
+	// See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
+	repositories {
+		// Add repositories to publish to here.
+		// Notice: This block does NOT have the same function as the block in the top level.
+		// The repositories here will be used for publishing your artifact, not for
+		// retrieving dependencies.
+	}
+}

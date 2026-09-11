@@ -1,0 +1,291 @@
+package me.matl114.hacks.modules.interact;
+
+import java.awt.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+import java.util.function.Predicate;
+import me.matl114.accessors.access.ClientPlayerAccess;
+import me.matl114.accessors.hacks.PlayerInteractionAccess;
+import me.matl114.events.Event;
+import me.matl114.events.Listener;
+import me.matl114.events.impl.EventContainer;
+import me.matl114.hacks.*;
+import me.matl114.hacks.api.BaseModule;
+import me.matl114.hacks.api.ModulePath;
+import me.matl114.hacks.api.ModulePreset;
+import me.matl114.managers.Configs;
+import me.matl114.managers.Tasks;
+import me.matl114.managers.config.FlagRef;
+import me.matl114.managers.config.KeyBindRef;
+import me.matl114.managers.input.MultiKeyBind;
+import me.matl114.utils.*;
+import net.minecraft.entity.Entity;
+import net.minecraft.item.ItemStack;
+import net.minecraft.network.packet.Packet;
+import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerInteractBlockC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
+import net.minecraft.screen.slot.SlotActionType;
+import net.minecraft.util.Hand;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Box;
+import net.minecraft.util.math.Vec3d;
+
+public class TpInteract extends BaseModule {
+    public final ModulePath tpInteract = makePath(Configs.INTERACT_CONFIG, "tp-interact");
+
+    public static TpInteract INSTANCE;
+
+    public TpInteract() {
+        super("TpInteract");
+        bindFlag(enable);
+        INSTANCE = this;
+    }
+
+    public final FlagRef enable = flagBuilder(tpInteract.add("enable")).build();
+
+    public final KeyBindRef keyBindRef = moduleEntry(
+                    tpInteract.add("enable-hotkey"), new MultiKeyBind(), tpInteract.add("enable"))
+            .build();
+
+    public final FlagRef useFallMine =
+            flagBuilder(tpInteract.add("mine-interact-use-fail-mine")).build();
+
+    public final KeyBindRef tryTpSteal = hotkey(
+                    Configs.INTERACT_CONFIG,
+                    tpInteract.add("try-tp-steal-chest-key").toPath())
+            .defaultValue(new MultiKeyBind())
+            .build();
+
+    @Override
+    public void registerAll() {
+        super.registerAll();
+        registerListener(
+                Listener.getPacketPoint().getChannel(PlayerInteractBlockC2SPacket.class), this::onInteractBlock);
+        registerListener(
+                Listener.getPacketPoint().getChannel(PlayerInteractEntityC2SPacket.class), this::onInteractEntity);
+        registerListener(Listener.getPacketPoint().getChannel(PlayerActionC2SPacket.class), this::onBlockMine);
+        registerListener(Listener.getCustomListener().getChannel(ModulePreset.class), this::onModulePreset);
+    }
+
+    private final float ENABLE_NO_TP_DISTANCE = 1.14f;
+
+    public void onInteractBlock(Event<PlayerInteractBlockC2SPacket> event) {
+        if (event.isCancelled()) return;
+        if (enable.get()) {
+            var packetToSend = event.context;
+            BlockHitResult hit = event.context.getBlockHitResult();
+            BlockPos blockPos = hit.getBlockPos();
+            double distance = InteractExtra.INSTANCE.getBlockReachDistance() + ENABLE_NO_TP_DISTANCE;
+            if (new Box(blockPos).squaredMagnitude(mc.player.getEyePos()) > MathUtils.s2(distance)) {
+                if (!mc.player.isSneaking() && tryTpSteal.get().isAllPressed()) {
+                    int size = InvTasks.predictOpenVanillaContainerSize(blockPos);
+                    if (size != 0) {
+
+                        if (tpToBlock(
+                                blockPos,
+                                (sel) -> executeTp(sel, () -> {
+                                    Debug.chat("[TpInteract] 尝试和物品栏交互");
+                                    Listener.sendPacketNoEvents(packetToSend);
+                                    InvTasks.executePredictInventoryAction(
+                                            InventoryUtils.createInventory(Collections.nCopies(size, ItemStack.EMPTY)),
+                                            (handler) -> {
+                                                for (var i = 0; i < size; ++i) {
+                                                    mc.interactionManager.clickSlot(
+                                                            handler.syncId, i, 0, SlotActionType.QUICK_MOVE, mc.player);
+                                                }
+                                            });
+                                }))) {
+                            event.cancel();
+                        }
+                        return;
+                    }
+                }
+                if (tpToBlock(blockPos, (sel) -> executeTp(sel, packetToSend))) {
+                    event.cancel();
+                }
+            }
+        }
+    }
+
+    public void onInteractEntity(Event<PlayerInteractEntityC2SPacket> event) {
+        if (event.isCancelled()) return;
+        if (enable.get()) {
+            var packet = event.context;
+            // filter ATTACK packets
+            if (true || !Objects.equals(((Enum) packet.type.getType()).name(), "ATTACK")) {
+                int entityId = packet.entityId;
+                Entity entity = mc.world.getEntityById(entityId);
+                if (entity != null
+                        && entity.getBoundingBox().squaredMagnitude(mc.player.getEyePos())
+                                > MathUtils.s2(CombatTasks.getCombatExtra().getAttackRange() + ENABLE_NO_TP_DISTANCE)) {
+                    if (tpToEntity(entity, packet)) {
+                        event.cancel();
+                    }
+                }
+            }
+        }
+    }
+
+    public void onBlockMine(Event<PlayerActionC2SPacket> event) {
+        if (event.isCancelled()) return;
+        if (enable.get()) {
+            var packet = event.context;
+            switch (packet.getAction()) {
+                case START_DESTROY_BLOCK, STOP_DESTROY_BLOCK -> {
+                    BlockPos involvedBlock = packet.getPos();
+                    // check y;
+                    if (involvedBlock == null) return;
+                    // filter "out of building height" shit
+                    if (involvedBlock.getY() < (mc.world.getBottomY() - 1)
+                            || involvedBlock.getY() > (mc.world.getBottomY() + mc.world.getHeight() + 1)) {
+                        return;
+                    }
+                }
+                default -> {
+                    return;
+                }
+            }
+            BlockPos blockPos = packet.getPos();
+            double distance = InteractExtra.INSTANCE.getBlockReachDistance() + ENABLE_NO_TP_DISTANCE;
+            if (new Box(blockPos).squaredMagnitude(mc.player.getEyePos()) > MathUtils.s2(distance)) {
+                PlayerActionC2SPacket packetToSend = event.context();
+                if (tpToBlock(
+                        blockPos,
+                        useFallMine.get()
+                                ? (selectedPos) -> executeTp(selectedPos, () -> {
+                                    mc.getNetworkHandler().sendPacket(packetToSend);
+                                    PlayerInteractionAccess access = PlayerInteractionAccess.of(mc.interactionManager);
+                                    if (packetToSend.getAction() == PlayerActionC2SPacket.Action.START_DESTROY_BLOCK
+                                            && Objects.equals(access.getCurrentMiningPos(), packetToSend.getPos())
+                                            && access.getCurrentFailBreakPos() == null) {
+                                        access.sendFailBreakCurrentPos(null);
+                                    }
+                                })
+                                : (sel) -> executeTp(sel, packetToSend))) {
+                    event.cancel();
+                }
+            }
+        }
+    }
+
+    public boolean tpAndInteractBlock(BlockHitResult hitResult, Hand hand, boolean swing) {
+        return tpToBlock(
+                hitResult.getBlockPos(),
+                (sel) -> executeTp(sel, () -> {
+                    InteractionTasks.interactBlock(hand, hitResult, swing);
+                }));
+    }
+
+    public boolean tpToBlock(BlockPos pos, Predicate<Vec3d> callBack) {
+        // compat Freecam
+        Vec3d selectedPos = RenderUtils.getCameraEntityPos();
+        double eyeHeight = mc.player.getEyeHeight(mc.player.getPose());
+        if (MineTasks.distanceOutOfReach(pos, selectedPos.add(0, eyeHeight, 0))
+                || MovTasks.ENGIN.checkEnvironmentCollision(mc.player, selectedPos, true)) {
+            selectedPos = null;
+            for (var deltaPos : InteractExtra.INSTANCE.getBlocksAround()) {
+                Vec3d checkPos = pos.add(deltaPos).toBottomCenterPos().add(0, 1E-4, 0);
+                if (!MineTasks.distanceOutOfReach(pos, checkPos.add(0, eyeHeight, 0))
+                        && !MovTasks.ENGIN.checkEnvironmentCollision(mc.player, checkPos, true)) {
+                    selectedPos = checkPos;
+                    break;
+                }
+            }
+        }
+        if (selectedPos == null) {
+            logI18NSub("TpAct", "message.module.tp-interact.cannot-reach");
+            return false;
+        } else {
+            return callBack.test(selectedPos);
+        }
+    }
+
+    public boolean tpToEntity(Entity pos, Packet<?> packetToSend) {
+        Vec3d selectedPos = RenderUtils.getCameraEntityPos();
+        Box entityBox = pos.getBoundingBox();
+        double attackRange = CombatTasks.getCombatExtra().getAttackRange() + 1.0d;
+        double eyeHeight = mc.player.getEyeHeight(mc.player.getPose());
+        if (entityBox.squaredMagnitude(selectedPos.add(0, eyeHeight, 0)) > MathUtils.s2(attackRange)) {
+            selectedPos = null;
+            // make an algorithm to
+            BlockPos entityPos = pos.getBlockPos();
+            // todo: move this to CombatExtra or PositionPredictor or something
+            for (var deltaPos : InteractExtra.INSTANCE.getBlocksAround()) {
+                Vec3d checkPos = entityPos.add(deltaPos).toBottomCenterPos().add(0, 1E-4, 0);
+                if (entityBox.squaredMagnitude(checkPos.add(0, eyeHeight, 0)) < MathUtils.s2(attackRange)
+                        && !MovTasks.ENGIN.checkEnvironmentCollision(mc.player, checkPos, true)) {
+                    selectedPos = checkPos;
+                    break;
+                }
+            }
+        }
+        if (selectedPos == null) {
+            Debug.chat("[TpAct] Can not reach the target");
+            return false;
+        } else {
+            return executeTp(selectedPos, packetToSend);
+        }
+    }
+
+    public boolean executeTp(Vec3d pos, Runnable callback) {
+        Vec3d current = mc.player.getPos();
+        MovTasks.MovingContext context = MovTasks.createPlayerMovContext();
+        List<Vec3d> from = MovTasks.generateTpSequence(current, pos, false, 200, true);
+        List<Vec3d> to = MovTasks.generateTpSequence(pos, current, false, 200, true);
+        if (from.isEmpty() || to.isEmpty()) {
+            Debug.chat("[TpAct] Can not reach the target");
+            return false;
+        } else {
+            if (RenderTasks.DEBUG_RENDER_INTERACTION) {
+                RenderTasks.registerVirtualRenderTask(new RenderTasks.RenderTask(
+                        RenderTasks.DEBUG_TICK,
+                        new RenderTasks.BoxObject(
+                                mc.player.dimensions.getBoxAt(pos), ColorUtils.withAlpha(Color.MAGENTA, 0.25F))));
+            }
+            List<MovTasks.MovInfo> moveInfo = new ArrayList<>();
+            moveInfo.addAll(MovTasks.createMovInfoList(from));
+            moveInfo.addAll(MovTasks.createMovInfoList(to));
+            var actions = MovTasks.createMovingPacketsForMovSequence(context, moveInfo, false, true);
+            for (var i = 0; i < from.size(); ++i) {
+                actions.get(i).run();
+            }
+            callback.run();
+            for (int i = from.size(); i < actions.size(); ++i) {
+                if (actions.get(i).success) {
+                    actions.get(i).run();
+
+                } else {
+                    List<MovTasks.MovInfo> leftTasks = moveInfo.subList(i, actions.size());
+                    Tasks.scheduleDelayed(
+                            () -> {
+                                MovTasks.scheduleFarawayMoveInternal(leftTasks, false, context.resetTick(), true);
+                            },
+                            1);
+                    break;
+                }
+            }
+            MovTasks.setupAutoResync();
+            ClientPlayerAccess.of(mc.player).setForceNoFall(true);
+            return true;
+        }
+    }
+
+    public boolean executeTp(Vec3d pos, Packet<?>... packetToSend) {
+        return executeTp(pos, () -> {
+            for (Packet<?> packet : packetToSend) {
+                Listener.sendPacketNoEvents(packet);
+            }
+        });
+    }
+
+    public void onModulePreset(Event<EventContainer<ModulePreset>> event) {
+        switch (event.context().getValue()) {
+            case HACKING, VANILLA -> enable.set(true);
+            default -> enable.set(false);
+        }
+    }
+}

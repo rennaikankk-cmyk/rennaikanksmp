@@ -1,0 +1,134 @@
+package me.matl114.hacks.modules.render;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+import me.matl114.events.Event;
+import me.matl114.gui.Constants;
+import me.matl114.hacks.api.ModulePath;
+import me.matl114.hacks.utils.config.Direction2d;
+import me.matl114.hacks.utils.config.WidgetPos;
+import me.matl114.hacks.utils.render.ItemStackDisplayUtils;
+import me.matl114.managers.Configs;
+import me.matl114.managers.config.*;
+import me.matl114.versioned.api.VDrawContext;
+import net.minecraft.entity.EquipmentSlot;
+import net.minecraft.item.ItemStack;
+import net.minecraft.text.Text;
+
+public class EquipmentHud extends IRender2DModule {
+    public final ModulePath invHud = createRoot();
+
+    @Override
+    protected ModulePath createRoot() {
+        return makePath(Configs.RENDER_CONFIG, "in-game-hud.equipment-hud");
+    }
+
+    public EquipmentHud() {
+        super("EquipmentHud");
+    }
+
+    public EnumRef<ItemStackDisplayUtils.DamageDisplay> damageDisplay = builder(
+                    invHud.add("damage-display"), ItemStackDisplayUtils.DamageDisplay.class)
+            .defaultValue(ItemStackDisplayUtils.DamageDisplay.NONE)
+            .build();
+
+    public EnumRef<Direction2d> displayDirection = builder(invHud.add("damage-display-position"), Direction2d.class)
+            .defaultValue(Direction2d.DOWN)
+            .build();
+
+    public NBTRef<WidgetPos> handPos = builder(invHud.add("hand-pos"), WidgetPos.class)
+            .defaultValue(new WidgetPos(1, 0.0D, 0.0D, -60, 0))
+            .build();
+    public NBTRef<WidgetPos> handPos2 = builder(invHud.add("offhand-pos"), WidgetPos.class)
+            .defaultValue(new WidgetPos(1, 0.0D, 0.0D, 40, 0))
+            .build();
+    public NBTRef<WidgetPos> handPos3 = builder(invHud.add("head-pos"), WidgetPos.class)
+            .defaultValue(new WidgetPos(1, 0.0D, 0.0D, -40, 0))
+            .build();
+    public NBTRef<WidgetPos> handPos4 = builder(invHud.add("chest-pos"), WidgetPos.class)
+            .defaultValue(new WidgetPos(1, 0.0D, 0.0D, -20, 0))
+            .build();
+    public NBTRef<WidgetPos> handPos5 = builder(invHud.add("leg-pos"), WidgetPos.class)
+            .defaultValue(new WidgetPos(1, 0.0D, 0.0D, 0, 0))
+            .build();
+    public NBTRef<WidgetPos> handPos6 = builder(invHud.add("feet-pos"), WidgetPos.class)
+            .defaultValue(new WidgetPos(1, 0.0D, 0.0D, 20, 0))
+            .build();
+
+    Map<EquipmentSlot, NBTRef<WidgetPos>> map = new LinkedHashMap<>();
+
+    {
+        map.put(EquipmentSlot.MAINHAND, handPos);
+        map.put(EquipmentSlot.OFFHAND, handPos2);
+        map.put(EquipmentSlot.HEAD, handPos3);
+        map.put(EquipmentSlot.CHEST, handPos4);
+        map.put(EquipmentSlot.LEGS, handPos5);
+        map.put(EquipmentSlot.FEET, handPos6);
+    }
+
+    public void registerAll() {
+        super.registerAll();
+    }
+
+    @Override
+    public void onUpdate(Event<Void> event) {}
+
+    @Override
+    public void render2D(VDrawContext vdraw, float partialTicks) {
+        for (var re : map.entrySet()) {
+            ItemStack stack = mc.player.getEquippedStack(re.getKey());
+            {
+                var pp = re.getValue().get();
+                int startX = pp.getWindowX(mc.getWindow());
+                int startY = pp.getWindowY(mc.getWindow());
+                if (!stack.isEmpty()) {
+                    vdraw.drawItem(stack, startX, startY, 999, 0);
+                    vdraw.drawItemInSlot(mc.textRenderer, stack, startX, startY, null);
+                    drawDamageIfAbsent(vdraw, stack, startX, startY);
+                } else {
+                    vdraw.drawGuiTexture(Constants.EMPTY_SLOT_TO_SPRITE.get(re.getKey()), startX, startY, 16, 16);
+                }
+            }
+        }
+    }
+
+    private void drawDamageIfAbsent(VDrawContext vdraw, ItemStack stack, int startX, int startY) {
+        ItemStackDisplayUtils.DamageDisplay display = damageDisplay.get();
+        if (display == ItemStackDisplayUtils.DamageDisplay.NONE) return;
+        var damage = stack.getMaxDamage();
+        if (damage > 0) {
+            Text text = ItemStackDisplayUtils.getDamageShowText(stack, display);
+            if (text != null) {
+                float len = mc.textRenderer.getTextHandler().getWidth(text);
+                int startXX, startYY;
+                switch (displayDirection.get()) {
+                    case UP -> {
+                        startXX = (int) (startX + 8 - ((len - 1) / 2.0F));
+                        startYY = startY - 8;
+                    }
+                    case LEFT -> {
+                        startXX = (int) (startX - len);
+                        startYY = startY + 4;
+                    }
+                    case RIGHT -> {
+                        startXX = (int) (startX + 16);
+                        startYY = startY + 4;
+                    }
+                    default -> {
+                        // down
+                        startXX = (int) (startX + 8 - ((len - 1) / 2.0F));
+                        startYY = startY + 15;
+                    }
+                }
+
+                vdraw.drawText(
+                        mc.textRenderer,
+                        text.asOrderedText(),
+                        startXX,
+                        startYY,
+                        ItemStackDisplayUtils.getDamageDisplayColor(stack),
+                        true);
+            }
+        }
+    }
+}

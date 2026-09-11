@@ -1,0 +1,71 @@
+##可以通过重载材质包来重载这些功能
+#options:
+#  #启动ommc方块模型修复(可能会影响其他模组)(可能因版本问题出现故障)
+#  enable-model-protect: true
+#  #启用粘液材质覆写,使用slimefun-item-model中的材质id覆写已有粘液物品
+#  enable-slimefun-cmd-override: true
+#  #启用item-model功能,使用该功能会强加载所有材质包的所有模型
+#  enable-item-model-override: true
+#  #启用存储物品解析与展示
+#  enable-storageitem-display: true
+#  #启用物品粘液信息显示
+#
+#  enable-tooltips-display: true
+
+#namespace-for-slimefun-texture:
+#  - ae2
+#  - slimefunhelper
+#  - infinityexpansion
+#  - avaritia
+#
+#path-pattern-for-slimefun-model:
+#  - '^rennaikanksmp:slimefunitem/.*$'
+#  - '^rennaikanksmp:test/.*$'
+
+#暂时不能重载这部分功能
+
+#hotkeys:
+  #复制粘液id的热键
+#  slimefunid-copy: LEFT_CONTROL,C,BUTTON_1
+#  test-func: LEFT_CONTROL,T
+#  open-menu: LEFT_CONTROL,G
+ # quick-drop: LEFT_SHIFT,Q,BUTTON_1
+#  fast-mov: LEFT_SHIFT,BUTTON_1
+#  fast-drop: LEFT_SHIFT,Q
+#  quick-move: W,GRAVE_ACCENT
+#  quick-to-wall: W,F1
+#  toggle-flight-speed: LEFT_CONTROL,LEFT_BRACKET
+#  pick-item: LEFT_CONTROL,BUTTON_3
+
+#  save-slot-item: LEFT_CONTROL,A,BUTTON_1
+#  open-editor: LEFT_CONTROL,I
+#  open-inv-cache: LEFT_CONTROL,J
+#  wake-up-screen: F11
+
+
+
+#hotkeys-toggle:
+#  quick-mine: LEFT_CONTROL,M
+#  reach: LEFT_CONTROL,R
+#  mine-bot: LEFT_CONTROL,B
+#  mine-oneblock: LEFT_CONTROL,O
+#  detect-entity: LEFT_CONTROL,P
+#  always-att: LEFT_CONTROL,K
+#  auto-att: LEFT_CONTROL,LEFT_SHIFT,APOSTROPHE
+#  toggle-flight: LEFT_CONTROL,F
+#  speed-timer: LEFT_CONTROL,Y
+#  bow-aim: LEFT_CONTROL,H
+#  scaffold: LEFT_CONTROL,SEMICOLON
+#  mine-arua: LEFT_CONTROL,N
+#  hktest1: LEFT_CONTROL,T,1
+#  hktest2: LEFT_CONTROL,T,2
+#  hktest3: LEFT_CONTROL,T,3
+#  hktest4: LEFT_CONTROL,T,4
+
+#可以重载这部分功能
+
+
+
+
+
+

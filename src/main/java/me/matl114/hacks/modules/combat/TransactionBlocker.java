@@ -1,0 +1,113 @@
+package me.matl114.hacks.modules.combat;
+
+import me.matl114.events.Event;
+import me.matl114.events.Listener;
+import me.matl114.events.PacketManager;
+import me.matl114.events.packets.PacketStorage;
+import me.matl114.hacks.api.BaseModule;
+import me.matl114.hacks.api.ModulePath;
+import me.matl114.managers.Configs;
+import me.matl114.managers.config.FlagRef;
+import me.matl114.managers.config.KeyBindRef;
+import me.matl114.managers.input.MultiKeyBind;
+import me.matl114.utils.Debug;
+import net.minecraft.network.NetworkSide;
+import net.minecraft.network.packet.CommonPackets;
+import net.minecraft.network.packet.Packet;
+import net.minecraft.network.packet.PacketType;
+import net.minecraft.network.packet.c2s.common.CommonPongC2SPacket;
+import net.minecraft.network.packet.s2c.common.CommonPingS2CPacket;
+import net.minecraft.network.packet.s2c.play.EntityPassengersSetS2CPacket;
+import net.minecraft.network.packet.s2c.play.PlayerPositionLookS2CPacket;
+import net.minecraft.network.packet.s2c.play.PlayerRespawnS2CPacket;
+
+public class TransactionBlocker extends BaseModule {
+    public final ModulePath lagUtils = makePath(Configs.COMBAT_CONFIG, "lag-utils");
+    public final ModulePath transactionBlocker = lagUtils.add("transaction-blocker");
+
+    public TransactionBlocker() {
+        super("TransactionBlocker");
+        bindFlag(enable);
+    }
+
+    public final FlagRef enable = flagBuilder(transactionBlocker.add("enable")).build();
+
+    public final KeyBindRef hotkey = moduleEntry(
+                    transactionBlocker.addHotkey(), new MultiKeyBind(), transactionBlocker.addEnable())
+            .build();
+
+    public final FlagRef enableC =
+            flagBuilder(transactionBlocker.add("bw-test-1")).build();
+
+    @Override
+    public void registerAll() {
+        super.registerAll();
+        registerListener(PacketManager.getPacketQueueEvent().getChannel(NetworkSide.SERVERBOUND), this::onPacketQueue);
+        registerListener(
+                Listener.getPacketPoint().getChannel(PlayerPositionLookS2CPacket.class), this::onPlayerRespawnLook);
+        registerListener(Listener.getPacketPoint().getChannel(EntityPassengersSetS2CPacket.class), this::onDismount);
+    }
+
+    @Override
+    public void onEnableModule() {
+        super.onEnableModule();
+    }
+
+    public void onDisableModule() {
+        super.onDisableModule();
+        flush();
+    }
+
+    public void flush() {
+        PacketManager.flushOutBound((packet) -> {
+            if (isTransactionRelated(packet.packetType())) {
+                return PacketManager.FlushAction.DROP;
+            } else {
+                return PacketManager.FlushAction.QUEUE;
+            }
+        });
+    }
+
+    public boolean isTransactionRelated(Packet<?> packet) {
+        return packet instanceof CommonPongC2SPacket || packet instanceof CommonPingS2CPacket;
+    }
+
+    public boolean isTransactionRelated(PacketType<?> packet) {
+        return packet == CommonPackets.PING || packet == CommonPackets.PONG;
+    }
+
+    public void onPacketQueue(Event<PacketStorage> packetEvent) {
+        if (enable.get() && isTransactionRelated(packetEvent.context.packetType())) {
+            packetEvent.cancel();
+            Listener.sendPacketNoEvents(new CommonPongC2SPacket(0));
+        }
+    }
+
+    int rideId;
+
+    public void onDismount(Event<EntityPassengersSetS2CPacket> event) {
+        var pkt = event.context;
+        for (var re : pkt.getPassengerIds()) {
+            if (re == mc.player.getId()) {
+                rideId = event.context.getEntityId();
+                return;
+            }
+        }
+        if (rideId == event.context.getEntityId()) {
+            enable.set(true);
+        }
+    }
+
+    public void onPlayerRespawn(Event<PlayerRespawnS2CPacket> event) {
+        if (enableC.get()) {
+            enable.set(true);
+        }
+    }
+
+    public void onPlayerRespawnLook(Event<PlayerPositionLookS2CPacket> event) {
+        if (enableC.get() && mc.player != null && mc.player.getAbilities().flying) {
+            Debug.chat("Start");
+            enable.set(true);
+        }
+    }
+}

@@ -1,0 +1,45 @@
+package me.matl114.managers.file;
+
+import java.io.File;
+import lombok.Getter;
+
+public abstract class FileStorageImpl implements FileStorage {
+    @Getter
+    protected final File file;
+
+    protected boolean deprecated;
+
+    public FileStorageImpl(File file) {
+        this.file = file;
+        ensureParentDir();
+    }
+
+    protected boolean dirty;
+
+    @Override
+    public void markDirty(boolean dirty) {
+        this.dirty = dirty;
+    }
+
+    @Override
+    public boolean isDeprecated() {
+        return deprecated;
+    }
+
+    @Override
+    public void markDeprecated(boolean deprecated) {
+        this.deprecated = deprecated;
+    }
+
+    protected void ensureParentDir() {
+        File parent = file.getParentFile();
+        if (parent != null && !parent.exists()) {
+            parent.mkdirs();
+        }
+    }
+
+    @Override
+    public boolean isDirty() {
+        return dirty;
+    }
+}
