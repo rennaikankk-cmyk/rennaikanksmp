@@ -498,6 +498,12 @@ public class RenderTasks {
     private static ExplosiveESP explosiveESP;
 
     @Getter
+    private static HoleESP holeESP;
+
+    @Getter
+    private static DamageDisplay damageDisplay;
+
+    @Getter
     private static NameTag nameTag;
 
     @Getter
@@ -570,6 +576,8 @@ public class RenderTasks {
         entityLog = new EntityLog().register(m);
         entityESP = new EntityESP().register(m);
         explosiveESP = new ExplosiveESP().register(m);
+        holeESP = new HoleESP().register(m);
+        damageDisplay = new DamageDisplay().register(m);
 
         nameTag = new NameTag().register(m);
         nameList = new NameList().register(m);
