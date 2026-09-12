@@ -24,7 +24,7 @@ import net.minecraft.registry.RegistryKey;
 import net.minecraft.util.Identifier;
 
 public class EnchantmentDisplay extends BaseModule {
-    public static final String NAMESPACE = "slimefunhelper";
+    public static final String NAMESPACE = "rennaikanksmp";
     public static final String MODEL_PATH = "enchantment_icon/";
     public final ModulePath modelConfig = makePath(Configs.RENDER_CONFIG, "itemstack-display.enchantment-display");
     public static final Map<RegistryKey<Enchantment>, Identifier> ENCHANTMENT_ICON_MODELS = Map.ofEntries(

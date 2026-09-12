@@ -26,7 +26,7 @@ public class SlimefunScreen extends GenericBackGroundScreen {
     protected ExecutableWidget vanillaIcon;
     protected ExecutableWidget saveItemIcon;
     protected static Identifier CANCEL_GUI_TEXTURE = new Identifier("minecraft", "container/beacon/cancel");
-    private static final Identifier SEARCH_TEXTURE_SPRITE = new Identifier("slimefunhelper", "gui/search");
+    private static final Identifier SEARCH_TEXTURE_SPRITE = new Identifier("rennaikanksmp", "gui/search");
 
     protected List<Text> getSearchButtonTooltips() {
         return ChatUtils.parseTooltipsTranslation("widget.gui.slimefun-screen.search-default.tooltips", "");

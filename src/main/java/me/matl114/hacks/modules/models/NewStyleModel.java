@@ -40,7 +40,7 @@ public class NewStyleModel extends BaseModule {
             .build();
 
     public static String PATH_OF_NEW_VERSION = "new-version";
-    public static String NAMESPACE = "slimefunhelper";
+    public static String NAMESPACE = "rennaikanksmp";
 
     public static final String MODEL_PATH = "enchanted_book/";
     public static final String MAX_VALUE = "_max";

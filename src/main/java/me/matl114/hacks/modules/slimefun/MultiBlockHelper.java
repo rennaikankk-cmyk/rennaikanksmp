@@ -125,7 +125,7 @@ public class MultiBlockHelper extends BaseModule {
 
     private final Random interactOffsetRand = new Random();
     private SlimefunDispensorSuggestBookWidget suggestBook;
-    private static final String KEY_BOOK_WIDGET = "slimefunhelper:multiblock_suggestion_book_widget";
+    private static final String KEY_BOOK_WIDGET = "rennaikanksmp:multiblock_suggestion_book_widget";
     private static final int[] AVAILABLE_SLOTS = new int[] {0, 1, 2, 3, 4, 5, 6, 7, 8};
 
     private void onScreenInit(Event<HandledScreen<?>> event) {

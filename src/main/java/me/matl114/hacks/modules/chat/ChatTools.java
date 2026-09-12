@@ -123,8 +123,8 @@ public class ChatTools extends BaseModule {
         }
     }
 
-    private static final Identifier LOCK_ENABLE_SPRITE = Identifier.tryParse("slimefunhelper:gui/lock_enable");
-    private static final Identifier LOCK_DISABLE_SPRITE = Identifier.tryParse("slimefunhelper:gui/lock_disable");
+    private static final Identifier LOCK_ENABLE_SPRITE = Identifier.tryParse("rennaikanksmp:gui/lock_enable");
+    private static final Identifier LOCK_DISABLE_SPRITE = Identifier.tryParse("rennaikanksmp:gui/lock_disable");
     private static final List<Text> TOOLTIPS_CHAT_TOOLS = List.of(Text.literal("点击展开/关闭聊天框小工具栏"));
     private static final List<Text> TOOLTIPS_SEND_CACHE = List.of(Text.literal("发送缓存聊天框中的东西"));
     private static final List<Text> TOOLTIPS_AUTO_SEND =

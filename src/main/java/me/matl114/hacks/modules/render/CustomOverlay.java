@@ -25,7 +25,7 @@ public class CustomOverlay extends BaseModule {
     public FlagRef enable = flagBuilder(customOverlay.add("enable-custom")).build();
 
     public StringRef texturePath = builder(customOverlay.add("enable-custom-path"), StringRef.TYPE)
-            .defaultValue("slimefunhelper:textures/custom/genshin_impact.png")
+            .defaultValue("rennaikanksmp:textures/custom/genshin_impact.png")
             .validator(Configs.IDENTIFIER_VALIDATOR)
             .build();
 

@@ -43,7 +43,7 @@ public class SlimefunModels extends BaseModule {
             .build();
 
     public final ListRef autoModelPattern = builder(slimefunModels.add("path-pattern-for-slimefun-model"), ListRef.TYPE)
-            .defaultValue(List.of("^slimefunhelper:slimefunitem/.*$", "^slimefunhelper:test/.*$"))
+            .defaultValue(List.of("^rennaikanksmp:slimefunitem/.*$", "^rennaikanksmp:test/.*$"))
             .listValidator(Configs.REGEX_VALIDATOR)
             .build();
 
@@ -111,7 +111,7 @@ public class SlimefunModels extends BaseModule {
 
     private final Map<String, CustomModelDataComponent> customModelDatas = new HashMap<>();
     private final Map<String, Identifier> customItemModels = new HashMap<>();
-    private static final String OUR_NAMESPACE = "slimefunhelper";
+    private static final String OUR_NAMESPACE = "rennaikanksmp";
 
     public void loadCustomModelDatas() {
         try {
@@ -163,7 +163,7 @@ public class SlimefunModels extends BaseModule {
                 continue;
             }
             if (name.equals(OUR_NAMESPACE)) {
-                pack.findResources(ResourceType.CLIENT_RESOURCES, "slimefunhelper", "models/slimefunitem", (i, j) -> {
+                pack.findResources(ResourceType.CLIENT_RESOURCES, "rennaikanksmp", "models/slimefunitem", (i, j) -> {
                     String realNamespace = i.getNamespace();
                     if (!i.getPath().endsWith(".json")) return;
                     String realPath = i.getPath().replaceFirst("^models/", "").replaceAll(".json$", "");

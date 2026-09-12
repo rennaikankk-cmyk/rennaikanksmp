@@ -66,7 +66,7 @@ public class Render_v1_21_4 implements VRender, VRender.WrapRenderOperation {
     //                .setCullState(RenderType.NO_CULL).createCompositeState(false));
 
     public static final RenderLayer LINES = RenderLayer.of(
-            "slimefunhelper:debug_lines",
+            "rennaikanksmp:debug_lines",
             VertexFormats.LINES,
             VertexFormat.DrawMode.LINES,
             1536,
@@ -85,7 +85,7 @@ public class Render_v1_21_4 implements VRender, VRender.WrapRenderOperation {
 
     @ApiStatus.Experimental
     public static final RenderLayer LINES_STRIP = RenderLayer.of(
-            "slimefunhelper:debug_lines",
+            "rennaikanksmp:debug_lines",
             VertexFormats.LINES,
             VertexFormat.DrawMode.LINE_STRIP,
             1536,
@@ -103,7 +103,7 @@ public class Render_v1_21_4 implements VRender, VRender.WrapRenderOperation {
                     .build(false));
 
     public static final RenderLayer RECTS = RenderLayer.of(
-            "slimefunhelper:debug_rects",
+            "rennaikanksmp:debug_rects",
             VertexFormats.POSITION_COLOR,
             VertexFormat.DrawMode.TRIANGLES,
             1536,
@@ -116,7 +116,7 @@ public class Render_v1_21_4 implements VRender, VRender.WrapRenderOperation {
                     .build(false));
 
     public static final RenderLayer RECTS_STRIP = RenderLayer.of(
-            "slimefunhelper:debug_rects",
+            "rennaikanksmp:debug_rects",
             VertexFormats.POSITION_COLOR,
             VertexFormat.DrawMode.TRIANGLE_STRIP,
             1536,
@@ -129,7 +129,7 @@ public class Render_v1_21_4 implements VRender, VRender.WrapRenderOperation {
                     .build(false));
 
     public static final RenderLayer QUADS = RenderLayer.of(
-            "slimefunhelper:debug_quads",
+            "rennaikanksmp:debug_quads",
             VertexFormats.POSITION_COLOR,
             VertexFormat.DrawMode.QUADS,
             1536,
@@ -142,7 +142,7 @@ public class Render_v1_21_4 implements VRender, VRender.WrapRenderOperation {
                     .build(false));
 
     public static final RenderLayer QUADS_NO_CULL = RenderLayer.of(
-            "slimefunhelper:debug_quads_no_cull",
+            "rennaikanksmp:debug_quads_no_cull",
             VertexFormats.POSITION_COLOR,
             VertexFormat.DrawMode.QUADS,
             1536,

@@ -180,7 +180,7 @@ public class ItemESP extends BaseModule {
         }
     }
 
-    private static final String ITEM_ESP_METADATA_KEY = "slimefunhelper:item_esp_show_key";
+    private static final String ITEM_ESP_METADATA_KEY = "rennaikanksmp:item_esp_show_key";
 
     public void markItemToRender(Entity entity) {
         markItemToRender(entity, Text.empty());

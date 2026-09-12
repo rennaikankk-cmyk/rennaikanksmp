@@ -14,13 +14,13 @@
 
 #namespace-for-slimefun-texture:
 #  - ae2
-#  - slimefunhelper
+#  - rennaikanksmp
 #  - infinityexpansion
 #  - avaritia
 #
 #path-pattern-for-slimefun-model:
-#  - '^slimefunhelper:slimefunitem/.*$'
-#  - '^slimefunhelper:test/.*$'
+#  - '^rennaikanksmp:slimefunitem/.*$'
+#  - '^rennaikanksmp:test/.*$'
 
 #暂时不能重载这部分功能
 

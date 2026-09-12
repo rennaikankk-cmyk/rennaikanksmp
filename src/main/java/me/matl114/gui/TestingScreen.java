@@ -41,7 +41,7 @@ public class TestingScreen extends Screen {
         //            @Override
         //            public void renderAtCentered(DrawableWidget element, VDrawContext context, int mouseX, int mouseY,
         // float delta, float alpha, boolean shouldHighlight) {
-        //                Identifier texture = new Identifier("slimefunhelper", "textures/custom/recipecontainer.png");
+        //                Identifier texture = new Identifier("rennaikanksmp", "textures/custom/recipecontainer.png");
         //
         //                int xTextureOffset = 0;
         //                int yTextureOffset = 66;

@@ -1,0 +1,6 @@
+{
+  "parent": "rennaikanksmp:spear/spear_in_hand",
+  "textures": {
+    "layer0": "rennaikanksmp:spear/iron_spear_in_hand"
+  }
+}

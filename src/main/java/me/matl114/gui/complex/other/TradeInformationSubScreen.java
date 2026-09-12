@@ -31,7 +31,7 @@ public class TradeInformationSubScreen extends SubScreenWidget {
     private static final int TRADE_ICON_HEIGHT = 9;
     private static final Identifier TRADE_ARROW_OUT_OF_STOCK_TEXTURE =
             Identifier.ofVanilla("container/villager/out_of_stock");
-    private static final Identifier TRADE_ARROW_TEXTURE_SPRITE = new Identifier("slimefunhelper", "gui/trade_arrow");
+    private static final Identifier TRADE_ARROW_TEXTURE_SPRITE = new Identifier("rennaikanksmp", "gui/trade_arrow");
     private static final MinecraftClient mc = MinecraftClient.getInstance();
     private MerchantScreen screen;
 

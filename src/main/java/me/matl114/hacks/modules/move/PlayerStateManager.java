@@ -705,7 +705,7 @@ public class PlayerStateManager extends BaseModule {
     }
 
     // other players;
-    public static final String KEY_RENDER_CONTROL = "slimefunhelper:player_manager/player_status";
+    public static final String KEY_RENDER_CONTROL = "rennaikanksmp:player_manager/player_status";
     public static final EquipmentSlot[] ARMOR =
             new EquipmentSlot[] {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
 
@@ -998,7 +998,7 @@ public class PlayerStateManager extends BaseModule {
     }
 
     private static final String AREA_EFFECT_CLOUD_POTION_CONTENT =
-            "slimefunhelper:player_manager/tracking_linger_potion_type";
+            "rennaikanksmp:player_manager/tracking_linger_potion_type";
 
     public void onLingerPotionHit(Event<PotionEntity> eventLinger) {
         if (checkNull()) return;

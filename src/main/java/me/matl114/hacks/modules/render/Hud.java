@@ -86,7 +86,7 @@ public class Hud extends IRender2DColoredModule {
     public void handleIcon(VDrawContext vdraw) {
         if (right.get()) {
             vdraw.drawTexturedQuad(
-                    Identifier.tryParse("slimefunhelper:textures/custom/genshin_impact.png"),
+                    Identifier.tryParse("rennaikanksmp:textures/custom/genshin_impact.png"),
                     -80,
                     0,
                     0,
@@ -99,7 +99,7 @@ public class Hud extends IRender2DColoredModule {
         } else {
 
             vdraw.drawTexturedQuad(
-                    Identifier.tryParse("slimefunhelper:textures/custom/genshin_impact.png"),
+                    Identifier.tryParse("rennaikanksmp:textures/custom/genshin_impact.png"),
                     0,
                     80,
                     0,

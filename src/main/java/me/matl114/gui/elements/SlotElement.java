@@ -18,7 +18,7 @@ public class SlotElement extends AbstractElement {
     final SlotClickCallback callback;
 
     protected static final Identifier SLOT_RESOURCE =
-            new Identifier("slimefunhelper", "textures/custom/recipecontainer.png");
+            new Identifier("rennaikanksmp", "textures/custom/recipecontainer.png");
     protected static final int u0 = 0;
     protected static final int v0 = 222;
     protected static final int vheight = 18;

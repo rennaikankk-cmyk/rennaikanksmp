@@ -243,7 +243,7 @@ public class RenderOptimize extends BaseModule {
         }
     }
 
-    public static final String KEY_RENDER_CONTROL = "slimefunhelper:render_optimize/render_controller";
+    public static final String KEY_RENDER_CONTROL = "rennaikanksmp:render_optimize/render_controller";
 
     public void onBlockEntityTick(Event<BlockEntityTickInvoker> event) {
         BlockEntityTickInvoker entity = event.context();

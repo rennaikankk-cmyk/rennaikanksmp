@@ -58,7 +58,7 @@ public class ConfigureListWidget
     protected Config config;
     protected Map<String, ListEntryWidgetController> cache;
     private static final Map<String, String> cachedConfigUserSelectIndex = new HashMap<>();
-    public static final String FILTER_TEXT_WIDGET = "slimefunhelper:configure_list_widget/filter_text_widget";
+    public static final String FILTER_TEXT_WIDGET = "rennaikanksmp:configure_list_widget/filter_text_widget";
     private ArgsMap argsMap;
     private ContentDelegateWidget<TextFieldWidget> filterInputWidget;
     private boolean initialized = false;
