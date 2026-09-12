@@ -26,9 +26,10 @@ import me.matl114.gui.basic.*;
 import me.matl114.gui.complex.clickGui.ClickGuiMainScreen;
 import me.matl114.gui.complex.config.ConfigurateNewStyleScreen;
 import me.matl114.gui.elements.ButtonElement;
-import me.matl114.gui.elements.ColorBoxElement;
 import me.matl114.gui.elements.ColorLabelTextElement;
 import me.matl114.gui.elements.ColorSplitterElement;
+import me.matl114.gui.elements.ModernBarElement;
+import me.matl114.gui.elements.ModuleListButtonElement;
 import me.matl114.gui.presets.single.CenterScreen;
 import me.matl114.gui.presets.single.SimpleScreen;
 import me.matl114.hacks.MainTasks;
@@ -49,6 +50,7 @@ import me.matl114.managers.input.*;
 import me.matl114.utils.ChatUtils;
 import me.matl114.utils.algorithms.SerialExecutor;
 import me.matl114.utils.config.ValueAccessor;
+import me.matl114.versioned.api.VDrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.multiplayer.MultiplayerScreen;
 import net.minecraft.client.gui.widget.TextFieldWidget;
@@ -59,6 +61,7 @@ import net.minecraft.nbt.NbtElement;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
+import net.minecraft.util.math.MathHelper;
 import org.apache.commons.lang3.mutable.MutableBoolean;
 import org.jetbrains.annotations.NotNull;
 
@@ -109,6 +112,20 @@ public class ClickGui extends BaseModule {
     public NBTRef<WrapColor> textColor = builder(clickGui.add("gui-text-style"), WrapColor.class)
             .defaultValue(new WrapColor((Formatting.WHITE)))
             .build();
+
+    public final FlagRef dimBackground = builder(clickGui.add("dim-background"), Boolean.class)
+            .defaultValue(true)
+            .build();
+
+    public final IntRef dimStrength = intBuilder(clickGui.add("dim-strength"))
+            .defaultValue(110)
+            .validator(Configs.INT_POSITIVE)
+            .build();
+
+    public static int dimOverlayColor() {
+        int alpha = MathHelper.clamp(INSTANCE.dimStrength.get(), 0, 255);
+        return alpha << 24;
+    }
 
     public final FlagRef enableConfigSubGroup = builder(clickGui.add("enable-config-subgroup"), Boolean.class)
             .defaultValue(true)
@@ -273,7 +290,34 @@ public class ClickGui extends BaseModule {
 
     private SubScreenWidget createModuleListHolder(ModuleSlideMeta slideMeta) {
         return new DynamicSubScreenWidget(
-                ValueAccessor.of(slideMeta::getX, slideMeta::setX), ValueAccessor.of(slideMeta::getY, slideMeta::setY));
+                ValueAccessor.of(slideMeta::getX, slideMeta::setX),
+                ValueAccessor.of(slideMeta::getY, slideMeta::setY)) {
+            @Override
+            public void render0(VDrawContext context, int mouseX, int mouseY, float delta, boolean disableSelect) {
+                // live window bounds: head plus the expanded list beneath it
+                int width = 0;
+                int height = 0;
+                for (var child : this.childrenInteractOrder()) {
+                    width = Math.max(width, child.getX() + child.getWidth());
+                    height = Math.max(height, child.getY() + child.getHeight());
+                }
+                int x = this.getX();
+                int y = this.getY();
+                if (width > 0 && height > 0) {
+                    // soft shadow under the window, behind its content
+                    context.fill(x + 2, y + 3, x + width + 3, y + height + 3, 0, 0x4D000000);
+                }
+                super.render0(context, mouseX, mouseY, delta, disableSelect);
+                if (width > 0 && height > 0) {
+                    // crisp hairline outline on top so stacked windows stay separable
+                    int border = 0x33FFFFFF;
+                    context.fill(x, y, x + width, y + 1, 0, border);
+                    context.fill(x, y + height - 1, x + width, y + height, 0, border);
+                    context.fill(x, y, x + 1, y + height, 0, border);
+                    context.fill(x + width - 1, y, x + width, y + height, 0, border);
+                }
+            }
+        };
     }
 
     private DrawableWidget createModuleGroup(
@@ -283,6 +327,7 @@ public class ClickGui extends BaseModule {
         subScreen.addDrawableChild(expandHead);
         // add list
         SubScreenWidget moduleList = createModuleList(moduleGroup, metaData);
+        moduleList.refreshScreenSize();
         subScreen.addDrawableChild(new DynamicContentWidget<>(
                 () -> (slideMeta.slidingDown ? moduleList : null), 0, expandHead.getHeight()));
         return subScreen;
@@ -309,8 +354,16 @@ public class ClickGui extends BaseModule {
                 baseModule.getName());
     }
 
-    private static final List<Text> TOOLTIP_HAS_BIND = List.of(Text.literal("左键切换模块是否启用"), Text.literal("右键打开模块配置界面"));
-    private static final List<Text> TOOLTIPS_NO_BIND = List.of(Text.literal("点击打开模块配置界面"));
+    public List<Text> getModuleBoundTooltips() {
+        return List.of(
+                Text.translatableWithFallback("widget.click-gui.module-tooltips.toggle", "左键切换模块是否启用"),
+                Text.translatableWithFallback("widget.click-gui.module-tooltips.open-config", "右键打开模块配置界面"));
+    }
+
+    public List<Text> getModuleUnboundTooltips() {
+        return List.of(
+                Text.translatableWithFallback("widget.click-gui.module-tooltips.open-config-only", "点击打开模块配置界面"));
+    }
 
     public List<Text> getModuleButtonTooltips(BaseModule baseModule) {
         List<Text> texts = new ArrayList<>(ChatUtils.parseTooltipsTranslation(
@@ -321,9 +374,9 @@ public class ClickGui extends BaseModule {
             texts.add(Text.empty());
         }
         if (baseModule.getBindFlag() != null) {
-            texts.addAll(TOOLTIP_HAS_BIND);
+            texts.addAll(getModuleBoundTooltips());
         } else {
-            texts.addAll(TOOLTIPS_NO_BIND);
+            texts.addAll(getModuleUnboundTooltips());
         }
         return texts;
     }
@@ -339,7 +392,7 @@ public class ClickGui extends BaseModule {
         FlagRef bindFlag = baseModule.getBindFlag();
         return ExecutableWidget.instance(
                         0, 0, (int) widgetSize.get().x(), (int) widgetSize.get().y())
-                .setElementHandler(new ColorBoxElement(
+                .setElementHandler(new ModuleListButtonElement(
                                 bindFlag != null
                                         ? ButtonAction.isLeft((bl) -> {
                                             if (bl) {
@@ -350,15 +403,10 @@ public class ClickGui extends BaseModule {
                                         })
                                         : ButtonAction.run(() -> openConfigurateScreen(baseModule, metaData)),
                                 TextProvider.of(getModuleName(baseModule)),
-                                () -> this.backGroundColor.get().withAlpha(192),
+                                () -> this.backGroundColor.get().withAlpha(255),
                                 () -> this.textColor.get().withAlpha(255),
-                                (el, bl) -> {
-                                    if (bindFlag != null && bindFlag.get()) {
-                                        return moduleListColor.get().withAlpha(255);
-                                    } else if (bl) {
-                                        return -1;
-                                    } else return null;
-                                })
+                                () -> this.moduleListColor.get().withAlpha(255),
+                                bindFlag != null ? bindFlag::get : () -> false)
                         .withTooltips(TooltipHandler.of(getModuleButtonTooltips(baseModule))));
     }
 
@@ -368,12 +416,66 @@ public class ClickGui extends BaseModule {
     private static final int buttonHeight = 18;
     private static final int buttonBlank = 2;
 
+    private record GuiThemePreset(String nameKey, String fallback, String background, String accent) {}
+
+    private static final List<GuiThemePreset> THEME_PRESETS = List.of(
+            new GuiThemePreset("violet", "紫色", "#323232", "#984FDB"),
+            new GuiThemePreset("azure", "深蓝", "#232B38", "#3E7BFA"),
+            new GuiThemePreset("slime", "史莱姆", "#243329", "#3FBF7F"),
+            new GuiThemePreset("crimson", "暗红", "#332626", "#E05252"));
+
+    private void applyThemePreset(GuiThemePreset preset) {
+        backGroundColor.set(new WrapColor(preset.background()));
+        configColor.set(new WrapColor(preset.background()));
+        moduleListColor.set(new WrapColor(preset.accent()));
+    }
+
+    private boolean isThemePresetActive(GuiThemePreset preset) {
+        int background = Integer.parseInt(preset.background().substring(1), 16);
+        int accent = Integer.parseInt(preset.accent().substring(1), 16);
+        return backGroundColor.get().asRGB() == background
+                && moduleListColor.get().asRGB() == accent;
+    }
+
+    @Override
+    public void addCustomWidgets(Consumer<DrawableWidget> acceptor, int dx, int dy, int dblank) {
+        // one row of theme preset buttons in the GuiSettings page; colors are
+        // sampled live from config every frame, so applying is instant
+        SubScreenWidget row = new SubScreenWidget(0, 0, dx, dy);
+        DisplayWidget.instance(0, 0, indexWidth, dy)
+                .setRenderHandler(new ColorLabelTextElement(
+                        TextProvider.of(Text.translatableWithFallback("widget.click-gui.theme-presets", "主题预设")),
+                        () -> this.textColor.get().withAlpha(255),
+                        () -> this.backGroundColor.get().withAlpha(192)))
+                .addToSub(row);
+        int count = THEME_PRESETS.size();
+        int cellWidth = (buttonWidth - (count - 1) * dblank) / count;
+        int x = indexWidth + blankWidth;
+        for (GuiThemePreset preset : THEME_PRESETS) {
+            String accent = preset.accent();
+            ExecutableWidget.instance(x, 0, cellWidth, dy)
+                    .setElementHandler(new ModuleListButtonElement(
+                                    ButtonAction.run(() -> applyThemePreset(preset)),
+                                    TextProvider.of(Text.translatableWithFallback(
+                                            "widget.click-gui.theme-preset." + preset.nameKey(), preset.fallback())),
+                                    () -> this.backGroundColor.get().withAlpha(255),
+                                    () -> this.textColor.get().withAlpha(255),
+                                    () -> new WrapColor(accent).withAlpha(255),
+                                    () -> isThemePresetActive(preset))
+                            .withTooltips(TooltipHandler.of(ChatUtils.parseTooltipsTranslation(
+                                    "widget.click-gui.theme-preset.tooltips", "点击应用整套配色（立即生效）"))))
+                    .addToSub(row);
+            x += cellWidth + dblank;
+        }
+        acceptor.accept(row);
+    }
+
     public DrawableWidget createBaseModuleConfigurateScreen(BaseModule baseModule, ClickGuiMetaData metaData) {
         int width = indexWidth + blankWidth + buttonWidth;
         DynamicListWidget listWidget = new DynamicListWidget(0, 0, width);
 
         listWidget.addDrawableChild(ExecutableWidget.instance(0, 0, width, buttonHeight)
-                .setElementHandler(new ColorLabelTextElement(
+                .setElementHandler(new ModernBarElement(
                                 TextProvider.of(getModuleName(baseModule)),
                                 () -> this.textColor.get().withAlpha(255),
                                 () -> this.moduleListColor.get().withAlpha(255))
@@ -492,7 +594,26 @@ public class ClickGui extends BaseModule {
             WrapperConfigRef<?> configWidget, BooleanSupplier extraShowCondition) {
         int width = indexWidth + blankWidth + buttonWidth;
         SubScreenWidget keyValue = new SubScreenWidget(0, 0, width, buttonHeight + buttonBlank);
-        keyValue.addDrawableChild(DisplayWidget.instance(0, 0, width, buttonBlank + buttonHeight));
+        keyValue.addDrawableChild(DisplayWidget.instance(0, 0, width, buttonBlank + buttonHeight)
+                .setRenderHandler(new AbstractElement()
+                        .combineRender((element, context, mouseX, mouseY, delta, alpha, shouldHighlight) -> {
+                            // faint row backdrop + hairline separator so config
+                            // rows read as a list instead of floating editors
+                            context.fill(
+                                    0,
+                                    0,
+                                    element.getTextureWidth(),
+                                    element.getTextureHeight(),
+                                    0,
+                                    this.configColor.get().withAlpha(30));
+                            context.fill(
+                                    0,
+                                    element.getTextureHeight() - 1,
+                                    element.getTextureWidth(),
+                                    element.getTextureHeight(),
+                                    0,
+                                    0x14FFFFFF);
+                        })));
         DrawableWidget kvInputWidget = getKeyValueWidget(configWidget.ref(), configWidget.keyName());
         keyValue.addDrawableChild(kvInputWidget);
         BooleanSupplier showCondition = configWidget.showPredicate();
@@ -581,7 +702,9 @@ public class ClickGui extends BaseModule {
                         taskExecutor.submit(updateTask);
                     }
                 },
-                metaData.searching);
+                metaData.searching,
+                // modern box: dark slate border, white when focused
+                (el, focused) -> focused ? 0xFFFFFFFF : 0xFF3A4150);
         // initialize
         updateTask.run();
         subScreen.addDrawableChild(inputWidget);
@@ -680,13 +803,13 @@ public class ClickGui extends BaseModule {
                                 return true;
                             }
                         })
-                        .combineRender(new ColorLabelTextElement(
+                        .combineRender(new ModernBarElement(
                                 TextProvider.of(Text.translatableWithFallback(
                                         "widget.click-gui.module-group-name." + module, module)),
                                 () -> textColor.get().withAlpha(255),
                                 () -> moduleListColor.get().withAlpha(255)))
                         .combineRender(((element, context, mouseX, mouseY, delta, alpha, shouldHighlight) -> {
-                            context.setShaderColor(backGroundColor.get().withAlpha(255));
+                            context.setShaderColor(textColor.get().withAlpha(255));
                             context.drawGuiTexture(
                                     slideMeta.slidingDown
                                             ? Constants.EXPAND_GUI_ON_SPRITE
@@ -698,7 +821,8 @@ public class ClickGui extends BaseModule {
                                     element.getTextureHeight() - 4);
                             context.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
                         }))
-                        .withTooltips(TooltipHandler.of(List.of(Text.literal("拖动或鼠标滚轮以修改位置")))));
+                        .withTooltips(TooltipHandler.of(List.of(
+                                Text.translatableWithFallback("widget.click-gui.module-group-drag", "拖动或鼠标滚轮以修改位置")))));
     }
 
     private DrawableWidget createBaseSettings(Screen screen, ClickGuiMetaData meta) {
@@ -755,7 +879,7 @@ public class ClickGui extends BaseModule {
 
     private DrawableWidget createConfig(ClickGuiMetaData meta) {
         var screen = new ConfigurateNewStyleScreen(Config.getConfigs().stream().toList());
-        screen.init(mc, mc.getWindow().getScaledWidth(), mc.getWindow().getScaledHeight());
+        screen.init(mc.getWindow().getScaledWidth(), mc.getWindow().getScaledHeight());
         return new ContentDelegateWidget<>(0, 0, 0, 0).setContentDelegate(screen);
     }
 

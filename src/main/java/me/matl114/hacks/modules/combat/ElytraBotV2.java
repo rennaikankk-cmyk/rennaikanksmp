@@ -24,6 +24,7 @@ import me.matl114.hacks.utils.config.NBTTypes;
 import me.matl114.hacks.utils.config.OptionalPrimitive;
 import me.matl114.hacks.utils.entity.PredictorImpl;
 import me.matl114.hacks.utils.move.FlightVelocity;
+import me.matl114.hacks.utils.move.PursuitUtils;
 import me.matl114.managers.Configs;
 import me.matl114.managers.Tasks;
 import me.matl114.managers.config.*;
@@ -241,16 +242,43 @@ public class ElytraBotV2 extends BaseModule {
             .show(() -> mode.get().isIn(Mode.MACE, Mode.SPEAR) && spearMaxDamage.get())
             .build();
 
-    // ---------------- v2 follower terrain ----------------
-    public final FlagRef terrainAware = flagBuilder(path.add("terrain-aware"))
-            .defaultValue(true)
-            .show(() -> mode.get().isIn(Mode.FOLLOW))
-            .build();
+    // ---------------- v2 pursuit upgrade ----------------
+
+    public final FlagRef terrainAware =
+            flagBuilder(path.add("terrain-aware")).defaultValue(true).build();
 
     public final IntRef terrainLookahead = intBuilder(path.add("terrain-lookahead"))
             .defaultValue(8)
             .validator(Configs.INT_POSITIVE)
-            .show(() -> mode.get().isIn(Mode.FOLLOW) && terrainAware.get())
+            .show(() -> terrainAware.get())
+            .build();
+
+    public final FlagRef avoidanceFan = flagBuilder(path.add("avoidance-fan"))
+            .defaultValue(true)
+            .show(() -> terrainAware.get())
+            .build();
+
+    /** intercept course: cut off a moving target instead of tail-chasing it */
+    public final FlagRef intercept =
+            flagBuilder(path.add("intercept")).defaultValue(true).build();
+
+    /** prediction strength for the intercept course, 0 = chase current pos */
+    public final DoubleRef interceptLead = doubleBuilder(path.add("intercept-lead"))
+            .defaultValue(1.0D)
+            .validator(v -> v >= 0.0D && v <= 1.0D)
+            .show(() -> intercept.get())
+            .build();
+
+    /** near the target stop sprinting through it: slow to a trailing follow */
+    public final FlagRef converge = flagBuilder(path.add("converge"))
+            .defaultValue(true)
+            .show(() -> mode.get().isIn(Mode.FOLLOW))
+            .build();
+
+    /** after losing the target keep flying the last known course while re-searching */
+    public final IntRef lostTargetTicks = intBuilder(path.add("lost-target-ticks"))
+            .defaultValue(40)
+            .validator(Configs.INT_POSITIVE)
             .build();
 
     public final NBTRef<OptionalPrimitive<Double>> followOnGroundHeight = builder(
@@ -843,6 +871,81 @@ public class ElytraBotV2 extends BaseModule {
             Vec3d side = new Vec3d(0, 1, 0).crossProduct(horizontal).normalize();
             return side.multiply(magnitude);
         }
+
+        // ---------------------------------------------------------------
+        // shared pursuit helpers (follower / orbit / engage all use these)
+        // ---------------------------------------------------------------
+
+        // lost-target memory: last sighted position and velocity of the target
+        Vec3d lastSeenPos;
+        Vec3d lastSeenVel = Vec3d.ZERO;
+        int lastSeenTick = Integer.MIN_VALUE;
+
+        /** refresh the last-sighting memory; call every tick we still see a target */
+        void trackTargetSighting() {
+            if (base.target != null) {
+                lastSeenPos = base.target.getPos();
+                lastSeenVel = PursuitUtils.estimateTargetVelocity(base.target);
+                lastSeenTick = Tasks.getTick();
+            }
+        }
+
+        /**
+         * ghost course after losing the target: extrapolate the last sighting
+         * for a bounded number of ticks. null once the memory expired.
+         */
+        Vec3d lostCourse(double cruise) {
+            if (lastSeenPos == null || Tasks.getTick() - lastSeenTick >= base.lostTargetTicks.get()) {
+                return null;
+            }
+            int dt = Tasks.getTick() - lastSeenTick;
+            Vec3d ghost = lastSeenPos.add(lastSeenVel.multiply(Math.min(dt, 10)));
+            Vec3d heading = ghost.subtract(mc.player.getPos());
+            if (heading.lengthSquared() < 1E-9) {
+                return null;
+            }
+            return heading.normalize().multiply(cruise);
+        }
+
+        /**
+         * approach aim: intercept course on the moving target, keeping the
+         * fallback (attack predict / pearl landing) when intercept is off
+         */
+        Vec3d approachAim(Vec3d fallbackAim, double leadScale) {
+            if (!base.intercept.get() || base.pearlActive()) {
+                return fallbackAim;
+            }
+            double cruise = Math.max(0.8D, mc.player.getVelocity().length());
+            return PursuitUtils.interceptPoint(
+                    mc.player.getPos(),
+                    cruise,
+                    base.target.getPos(),
+                    PursuitUtils.estimateTargetVelocity(base.target),
+                    leadScale,
+                    40);
+        }
+
+        /**
+         * horizontal-only intercept for behaviours that manage altitude by
+         * their own state machine (mace pull-up/hover, spear orbit/engage):
+         * the predicted vertical offset of a climbing target would push the
+         * approach height ever upward, so only XZ borrows the intercept
+         */
+        Vec3d approachAimHorizontal(Vec3d fallbackAim, double leadScale) {
+            Vec3d aim = approachAim(fallbackAim, leadScale);
+            if (aim == fallbackAim) {
+                return fallbackAim;
+            }
+            return new Vec3d(aim.x, fallbackAim.y, aim.z);
+        }
+
+        /** fan terrain avoidance for non-dive headings; keeps heading length */
+        Vec3d avoid(Vec3d heading) {
+            if (!base.terrainAware.get() || !base.avoidanceFan.get()) {
+                return heading;
+            }
+            return PursuitUtils.steerAroundTerrain(mc.player.getEyePos(), heading, base.terrainLookahead.get());
+        }
     }
 
     // ---------------------------------------------------------------
@@ -863,8 +966,13 @@ public class ElytraBotV2 extends BaseModule {
 
         @Override
         public synchronized void onUpdate() {
+            double cruise = Math.max(0.8D, mc.player.getVelocity().length());
+            trackTargetSighting();
             if (base.target != null) {
-                Vec3d direction = base.predictTargetPos().subtract(mc.player.getPos());
+                // aim point: pearl landing already is an intercept; otherwise cut
+                // the moving target off instead of tail-chasing its current pos
+                Vec3d aimPos = approachAim(base.predictTargetPos(), base.interceptLead.get());
+                Vec3d direction = aimPos.subtract(mc.player.getPos());
                 if (base.currentOnGround) {
                     var op = base.followOnGroundHeight.get();
                     if (op.isPresent()) {
@@ -872,11 +980,22 @@ public class ElytraBotV2 extends BaseModule {
                     }
                 }
                 if (base.terrainAware.get()) {
-                    direction = climbIfBlocked(direction);
+                    direction = base.avoidanceFan.get() ? avoid(direction) : climbIfBlocked(direction);
+                }
+                // convergence: inside the brake distance, stop sprinting
+                // through the target and settle into a trailing follow
+                double dist = direction.length();
+                double convergeRadius = Math.max(4.0D, cruise * 3.0D);
+                if (base.converge.get() && dist < convergeRadius) {
+                    double scale = 0.35D + 0.65D * (dist / convergeRadius);
+                    direction = direction.normalize().multiply(cruise * scale);
                 }
                 movementDirection = direction;
             } else {
-                movementDirection = Vec3d.ZERO;
+                // don't stall the moment the target dips out: fly the last
+                // known course while searchTarget keeps looking
+                Vec3d ghost = lostCourse(cruise);
+                movementDirection = ghost != null ? ghost : Vec3d.ZERO;
             }
         }
 
@@ -948,6 +1067,13 @@ public class ElytraBotV2 extends BaseModule {
 
         public int onCondition(StateMachine machine, int state) {
             if (base.target == null) {
+                // ghost course on the last sighting instead of stalling mid-air
+                Vec3d ghost = lostCourse(Math.max(0.8D, mc.player.getVelocity().length()));
+                if (ghost != null) {
+                    movementDirection = ghost;
+                    machine.markForEndState();
+                    return state;
+                }
                 machine.markForEndState();
                 movementDirection = Vec3d.ZERO;
                 return STATE_NONE;
@@ -981,7 +1107,9 @@ public class ElytraBotV2 extends BaseModule {
         }
 
         public int onStatePullUp(StateMachine machine) {
-            Vec3d predictor = base.predictTargetPos();
+            // climb-out is also the long approach: intercept a runner's course
+            // (XZ only — altitude stays owned by the pull-up state machine)
+            Vec3d predictor = approachAimHorizontal(base.predictTargetPos(), base.interceptLead.get());
             if (shouldPullUpEating()) {
                 // keep distance while we must eat
                 setTargetToPlayerUpper(predictor);
@@ -1019,8 +1147,8 @@ public class ElytraBotV2 extends BaseModule {
                 return STATE_FOLLOW;
             }
             if (base.currentAction == TargetActionV2.ESCAPING || base.currentAction == TargetActionV2.PEARL_ESCAPE) {
-                // target running: cut the orbit and reposition straight
-                setTargetToPlayerUpper(base.predictTargetPos());
+                // target running: cut the orbit and reposition on its course
+                setTargetToPlayerUpper(approachAimHorizontal(base.predictTargetPos(), base.interceptLead.get()));
                 machine.markForEndState();
                 return STATE_HOVER;
             }
@@ -1029,7 +1157,7 @@ public class ElytraBotV2 extends BaseModule {
             Vec3d orbitPoint = base.target
                     .getPos()
                     .add(Math.cos(hoverAngle) * radius, base.totemHoverHeight.get(), Math.sin(hoverAngle) * radius);
-            movementDirection = orbitPoint.subtract(mc.player.getPos());
+            movementDirection = avoid(orbitPoint.subtract(mc.player.getPos()));
             if (movementDirection.length() < 5) {
                 movementDirection = movementDirection.normalize().multiply(5);
             }
@@ -1107,7 +1235,7 @@ public class ElytraBotV2 extends BaseModule {
             if (movement.length() < 5) {
                 movement = movement.normalize().multiply(5);
             }
-            movementDirection = movement;
+            movementDirection = avoid(movement);
         }
 
         protected void setTargetToPlayer(Vec3d targetPos) {
@@ -1183,6 +1311,7 @@ public class ElytraBotV2 extends BaseModule {
 
         @Override
         public synchronized void onUpdate() {
+            trackTargetSighting();
             if (mc.player.isFallFlying() || mc.player.getAbilities().flying) {
                 stateMachine.step();
                 if (attackFlag) {
@@ -1273,9 +1402,11 @@ public class ElytraBotV2 extends BaseModule {
 
         double orbitAngle = 0.0D;
         int dodgeTicksLeft = 0;
+        int dodgeCooldownUntil = Integer.MIN_VALUE;
         int feintSign = 1;
         int nextFeintFlip = 0;
         int engageUntil = Integer.MIN_VALUE;
+        int reengageCooldownUntil = Integer.MIN_VALUE;
         boolean wasTargetUsingSpear = false;
 
         StateMachine stateMachine;
@@ -1287,6 +1418,13 @@ public class ElytraBotV2 extends BaseModule {
 
         public int onCondition(StateMachine machine, int state) {
             if (base.target == null) {
+                // ghost course on the last sighting instead of stalling mid-air
+                Vec3d ghost = lostCourse(Math.max(0.8D, mc.player.getVelocity().length()));
+                if (ghost != null) {
+                    movementDirection = ghost;
+                    machine.markForEndState();
+                    return state;
+                }
                 machine.markForEndState();
                 movementDirection = Vec3d.ZERO;
                 return STATE_ORBIT;
@@ -1318,14 +1456,26 @@ public class ElytraBotV2 extends BaseModule {
             if (base.killWindowOpen()) {
                 return STATE_ENGAGE;
             }
-            if (base.isTargetUsingSpear() && spearThreatens()) {
+            if (Tasks.getTick() >= dodgeCooldownUntil && base.isTargetUsingSpear() && spearThreatens()) {
                 dodgeTicksLeft = 5;
+                dodgeCooldownUntil = Tasks.getTick() + 20;
                 flipFeint();
                 machine.markForEndState();
                 return STATE_DODGE;
             }
+            // proactive strike: our spear is charged and the impact gate is
+            // open — press instead of circling while theirs stays in hand
+            if (Tasks.getTick() >= reengageCooldownUntil
+                    && SpearEnhance.isUsingSpear(mc.player)
+                    && SpearEnhance.canSpearKineticAttack(mc.player)
+                    && base.spearStabReady()
+                    && base.attackReady()) {
+                engageUntil = Tasks.getTick() + 40;
+                reengageCooldownUntil = engageUntil + 20;
+                return STATE_ENGAGE;
+            }
             Vec3d heading = orbitHeading();
-            movementDirection = heading;
+            movementDirection = avoid(heading);
             machine.markForEndState();
             return STATE_ORBIT;
         }
@@ -1350,8 +1500,9 @@ public class ElytraBotV2 extends BaseModule {
         }
 
         public int onStateEngage(StateMachine machine) {
-            if (base.isTargetUsingSpear() && spearThreatens()) {
+            if (Tasks.getTick() >= dodgeCooldownUntil && base.isTargetUsingSpear() && spearThreatens()) {
                 dodgeTicksLeft = 5;
+                dodgeCooldownUntil = Tasks.getTick() + 20;
                 flipFeint();
                 machine.markForEndState();
                 return STATE_DODGE;
@@ -1361,7 +1512,17 @@ public class ElytraBotV2 extends BaseModule {
                 return STATE_ORBIT;
             }
             Vec3d targetPos = base.predictTargetPos();
+            double attackRange = CombatTasks.getCombatExtra().getAttackAtTargetRange(base.target);
+            boolean farApproach = mc.player.getPos().distanceTo(base.target.getPos()) > attackRange + 8.0D;
+            if (farApproach) {
+                // still closing in: cut the course, steer around terrain; the
+                // final dive keeps the raw attack predict for accuracy
+                targetPos = approachAimHorizontal(targetPos, base.interceptLead.get() * 0.7D);
+            }
             setTargetToPlayer(targetPos);
+            if (farApproach) {
+                movementDirection = avoid(movementDirection);
+            }
             boolean inRange = TargetSelector.INSTANCE.isWithinAttackRange(
                     mc.player.getPos(),
                     base.target.getBoundingBox(),
@@ -1392,19 +1553,40 @@ public class ElytraBotV2 extends BaseModule {
             if (!(base.target instanceof PlayerEntity player)) return false;
             double distance = mc.player.getPos().distanceTo(player.getPos());
             if (distance > base.combatSpearRange.get() + 3.0D) return false;
-            return SpearEnhance.canSpearKineticAttack(player);
+            if (!SpearEnhance.canSpearKineticAttack(player)) return false;
+            // actually aimed at us: a charged spear staring away threatens
+            // nobody. without this check the orbit (radius spearRange+2) sits
+            // inside the threat bubble (spearRange+3) forever and would dodge
+            // every single tick while they merely hold the spear
+            Vec3d toUs = mc.player.getPos().subtract(player.getPos()).normalize();
+            return player.getRotationVector().dotProduct(toUs) > 0.25D;
         }
 
         Vec3d orbitHeading() {
-            orbitAngle += (2 * Math.PI) / 36.0D;
             if (Tasks.getTick() >= nextFeintFlip) {
                 flipFeint();
                 nextFeintFlip = Tasks.getTick() + base.dodgeCycleTicks.get();
             }
-            double radius = base.combatSpearRange.get() + 2.0D;
-            Vec3d orbitPoint =
-                    base.target.getPos().add(Math.cos(orbitAngle) * radius, 6.0D, Math.sin(orbitAngle) * radius);
-            Vec3d heading = orbitPoint.subtract(mc.player.getPos());
+            // chasing: a runner (or a target still far away) is not pressed by
+            // an orbit — cut across its course until we are in spear range
+            boolean chasing = base.currentAction == TargetActionV2.ESCAPING
+                    || mc.player.getPos().subtract(base.target.getPos()).horizontalLength()
+                            > base.combatSpearRange.get() * 2.5D;
+            Vec3d heading;
+            if (chasing) {
+                Vec3d aim = approachAimHorizontal(base.predictTargetPos(), base.interceptLead.get());
+                heading = aim.subtract(mc.player.getPos());
+            } else {
+                orbitAngle += (2 * Math.PI) / 36.0D;
+                double radius = base.combatSpearRange.get() + 2.0D;
+                // wave the orbit up/down: the periodic dip banks spear-charge
+                // fall distance, so a full charge is available to press with
+                double bob = 3.0D * Math.sin(2.0D * orbitAngle);
+                Vec3d orbitPoint = base.target
+                        .getPos()
+                        .add(Math.cos(orbitAngle) * radius, 6.0D + bob, Math.sin(orbitAngle) * radius);
+                heading = orbitPoint.subtract(mc.player.getPos());
+            }
             if (base.isTargetUsingSpear()) {
                 // feint: persistent small lateral drift that flips on a cycle
                 heading = heading.add(lateralDodge(heading, 0.5D * base.dodgeIntensity.get() * feintSign));
@@ -1429,6 +1611,7 @@ public class ElytraBotV2 extends BaseModule {
 
         @Override
         public synchronized void onUpdate() {
+            trackTargetSighting();
             stateMachine.step();
             wasTargetUsingSpear = base.isTargetUsingSpear();
         }
@@ -1445,6 +1628,8 @@ public class ElytraBotV2 extends BaseModule {
         @Override
         public void onEnable() {
             engageUntil = Integer.MIN_VALUE;
+            reengageCooldownUntil = Integer.MIN_VALUE;
+            dodgeCooldownUntil = Integer.MIN_VALUE;
             stateMachine.setState(STATE_ORBIT);
         }
 

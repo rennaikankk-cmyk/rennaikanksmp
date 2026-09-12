@@ -546,9 +546,6 @@ public class RenderTasks {
     private static CustomOverlay customOverlay;
 
     @Getter
-    private static Freecam freecam;
-
-    @Getter
     private static RenderOptimize renderOptimize;
 
     @Getter
@@ -596,7 +593,6 @@ public class RenderTasks {
         zoom = new Zoom().register(m);
         sleepMode = new SleepMode().register(m);
         customOverlay = new CustomOverlay().register(m);
-        freecam = new Freecam().register(m);
         renderOptimize = new RenderOptimize().register(m);
         hud = new Hud().register(m);
         moduleListHud = new ModuleListHud().register(m);

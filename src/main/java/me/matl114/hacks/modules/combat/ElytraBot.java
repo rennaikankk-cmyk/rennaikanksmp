@@ -31,6 +31,7 @@ import me.matl114.hacks.utils.config.*;
 import me.matl114.hacks.utils.entity.PredictorImpl;
 import me.matl114.hacks.utils.move.ElytraOptimizeUtils;
 import me.matl114.hacks.utils.move.FlightVelocity;
+import me.matl114.hacks.utils.move.PursuitUtils;
 import me.matl114.managers.Configs;
 import me.matl114.managers.Tasks;
 import me.matl114.managers.config.*;
@@ -763,6 +764,12 @@ public class ElytraBot extends BaseModule {
     public static class Follower extends AbstractBotBehaviour {
         // todo: add in-hole behaviour, add hole-esp related, add landing
 
+        // pursuit upgrade (shared with v2): intercept course, terrain fan,
+        // convergence and lost-target memory, always on
+        Vec3d lastSeenPos;
+        Vec3d lastSeenVel = Vec3d.ZERO;
+        int lastSeenTick = Integer.MIN_VALUE;
+
         @Override
         public Entity searchTarget() {
             return CombatTasks.getTargetSelector().searchAttack(base.targetRange.get(), true, 0, this::canBeAttack);
@@ -783,14 +790,33 @@ public class ElytraBot extends BaseModule {
         @Override
         public synchronized void onUpdate() {
             super.onUpdate();
+            double cruise = Math.max(0.8D, mc.player.getVelocity().length());
             if (base.target != null) {
-                movementDirection = base.target.getPos().subtract(mc.player.getPos());
+                lastSeenPos = base.target.getPos();
+                lastSeenVel = PursuitUtils.estimateTargetVelocity(base.target);
+                lastSeenTick = Tasks.getTick();
+                Vec3d aimPos = PursuitUtils.interceptPoint(
+                        mc.player.getPos(), cruise, base.target.getPos(), lastSeenVel, 1.0D, 40);
+                Vec3d direction = aimPos.subtract(mc.player.getPos());
                 if (base.currentOnGround) {
                     var op = base.followOnGroundHeight.get();
                     if (op.isPresent()) {
-                        movementDirection = movementDirection.add(0, op.getValue(), 0);
+                        direction = direction.add(0, op.getValue(), 0);
                     }
                 }
+                direction = PursuitUtils.steerAroundTerrain(mc.player.getEyePos(), direction, 8);
+                double dist = direction.length();
+                double convergeRadius = Math.max(4.0D, cruise * 3.0D);
+                if (dist < convergeRadius) {
+                    double scale = 0.35D + 0.65D * (dist / convergeRadius);
+                    direction = direction.normalize().multiply(cruise * scale);
+                }
+                movementDirection = direction;
+            } else if (lastSeenPos != null && Tasks.getTick() - lastSeenTick < 40) {
+                int dt = Tasks.getTick() - lastSeenTick;
+                Vec3d ghost = lastSeenPos.add(lastSeenVel.multiply(Math.min(dt, 10)));
+                movementDirection =
+                        ghost.subtract(mc.player.getPos()).normalize().multiply(cruise);
             } else {
                 movementDirection = Vec3d.ZERO;
             }
