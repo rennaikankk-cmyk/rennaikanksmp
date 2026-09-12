@@ -375,8 +375,15 @@ public class ElytraBotV2 extends BaseModule {
         }
     }
 
+    /**
+     * dynamic speed shaping for the active behaviour: dive-speed braking is
+     * written here each tick (steep dive = slower, more ticks inside the
+     * strike window); behaviours reset it to 1.0 when not shaping
+     */
+    double behaviourSpeedMultiplier = 1.0D;
+
     public double speedMultiplier() {
-        return 1.0D;
+        return behaviourSpeedMultiplier;
     }
 
     // ---------------------------------------------------------------
@@ -1178,10 +1185,16 @@ public class ElytraBotV2 extends BaseModule {
                 return STATE_HOVER;
             }
             Vec3d targetPos = base.predictTargetPos();
+            double attackRange = CombatTasks.getCombatExtra().getAttackAtTargetRange(base.target);
+            // terminal guidance: inside the strike window the aim snaps from
+            // the attack-predict point to the live hitbox center — a
+            // sidestepping target cannot slip the final ticks of the dive
+            double strikeDist = mc.player.getPos().distanceTo(base.target.getPos());
+            if (strikeDist < attackRange * 1.6D) {
+                targetPos = base.target.getPos().add(0, base.target.getHeight() * 0.5D, 0);
+            }
             boolean targetInRange = TargetSelector.INSTANCE.isWithinAttackRange(
-                    mc.player.getPos(),
-                    base.target.getBoundingBox(),
-                    CombatTasks.getCombatExtra().getAttackAtTargetRange(base.target));
+                    mc.player.getPos(), base.target.getBoundingBox(), attackRange);
             boolean mayAttack = shouldAttackSimple() || shouldAttackMace();
             if (mayAttack && targetInRange) {
                 setTargetToPlayer(targetPos);
@@ -1206,6 +1219,14 @@ public class ElytraBotV2 extends BaseModule {
                 return STATE_PULL_UP;
             }
             setTargetToPlayer(targetPos);
+            // dive-speed shaping (from the v1 mace): the steeper the dive the
+            // harder we brake — more ticks spent inside the strike window
+            // instead of blowing straight through it
+            double verticalShare = 0.0D;
+            if (movementDirection.lengthSquared() > 1E-9) {
+                verticalShare = Math.abs(movementDirection.normalize().y);
+            }
+            base.behaviourSpeedMultiplier = verticalShare > 0.75D ? Math.min(1.0D, 0.75D / verticalShare) : 1.0D;
             machine.markForEndState();
             return STATE_FOLLOW;
         }
@@ -1312,6 +1333,9 @@ public class ElytraBotV2 extends BaseModule {
         @Override
         public synchronized void onUpdate() {
             trackTargetSighting();
+            // reset every tick: only the dive state shapes speed, and a stale
+            // multiplier must not bleed into pull-up/hover/attack
+            base.behaviourSpeedMultiplier = 1.0D;
             if (mc.player.isFallFlying() || mc.player.getAbilities().flying) {
                 stateMachine.step();
                 if (attackFlag) {
