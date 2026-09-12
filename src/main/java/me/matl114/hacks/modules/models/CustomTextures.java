@@ -44,7 +44,7 @@ public class CustomTextures extends BaseModule {
         }
     }
 
-    private static final String OUR_NAMESPACE = "slimefunhelper";
+    private static final String OUR_NAMESPACE = "rennaikanksmp";
 
     public Collection<Identifier> loadOurselvesCustomModelTexture(ResourceManager manager) {
         List<Identifier> textureIds = new ArrayList<>();
@@ -77,7 +77,7 @@ public class CustomTextures extends BaseModule {
                 continue;
             }
             if (name.equals(OUR_NAMESPACE)) {
-                pack.findResources(ResourceType.CLIENT_RESOURCES, "slimefunhelper", "textures/slimefunitem", (i, j) -> {
+                pack.findResources(ResourceType.CLIENT_RESOURCES, "rennaikanksmp", "textures/slimefunitem", (i, j) -> {
                     String realNamespace = i.getNamespace();
                     if (i.getPath().endsWith(".png")) {
                         String realPath =

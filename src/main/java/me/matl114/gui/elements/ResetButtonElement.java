@@ -7,7 +7,7 @@ import me.matl114.utils.ChatUtils;
 import net.minecraft.util.Identifier;
 
 public class ResetButtonElement extends IconElement.SimpleIconElement {
-    public static final Identifier RESET_BUTTON = new Identifier("slimefunhelper", "gui/reset");
+    public static final Identifier RESET_BUTTON = new Identifier("rennaikanksmp", "gui/reset");
 
     public ResetButtonElement(BooleanSupplier canReset, Runnable reset) {
         super(ButtonElement.BUTTON_INACTIVE, ButtonElement.BUTTON, true, ButtonAction.run(() -> {

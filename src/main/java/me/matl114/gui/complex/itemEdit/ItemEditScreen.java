@@ -154,13 +154,13 @@ public class ItemEditScreen extends ConfirmingBigScreen {
     ExecutableWidget snbt;
     ExecutableWidget guide;
 
-    protected static final Identifier SAVE_TEXTURE_SPRITE = new Identifier("slimefunhelper", "gui/save");
+    protected static final Identifier SAVE_TEXTURE_SPRITE = new Identifier("rennaikanksmp", "gui/save");
 
-    protected static final Identifier COPYCMD_TEXTURE_SPRITE = new Identifier("slimefunhelper", "gui/copy_command");
-    protected static final Identifier EDITOR_TEXTURE_SPRITE = new Identifier("slimefunhelper", "gui/editor");
+    protected static final Identifier COPYCMD_TEXTURE_SPRITE = new Identifier("rennaikanksmp", "gui/copy_command");
+    protected static final Identifier EDITOR_TEXTURE_SPRITE = new Identifier("rennaikanksmp", "gui/editor");
 
-    protected static final Identifier SNBT_TEXTURE_SPRITE = new Identifier("slimefunhelper", "gui/snbt_editor");
-    protected static final Identifier GUIDE_TEXTURE_SPRITE = new Identifier("slimefunhelper", "gui/list_tag");
+    protected static final Identifier SNBT_TEXTURE_SPRITE = new Identifier("rennaikanksmp", "gui/snbt_editor");
+    protected static final Identifier GUIDE_TEXTURE_SPRITE = new Identifier("rennaikanksmp", "gui/list_tag");
     protected ItemProcessingSubScreen currentSubScreen;
 
     ContentDelegateWidget<EditBoxWidget> optionalMultiLine;

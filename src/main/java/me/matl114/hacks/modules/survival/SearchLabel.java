@@ -124,7 +124,7 @@ public class SearchLabel extends BaseModule {
     public final FlagRef removeIfClose =
             flagBuilder(searchControl.add("remove-if-close-to-target")).build();
 
-    private static final String KEY_CHUNK_LABEL_RECORD = "slimefunhelper:search_label_chunk_records";
+    private static final String KEY_CHUNK_LABEL_RECORD = "rennaikanksmp:search_label_chunk_records";
 
     private void updateWorldMapSettings(boolean show) {
         if (checkNull()) return;

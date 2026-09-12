@@ -95,12 +95,12 @@ public class WorldManager extends BaseModule {
 
     private final Executor asyncExecutor = new SerialExecutor(CompletableFuture::runAsync);
 
-    public static final String ENTITY_DATA_KEY = "slimefunhelper:world_manager/entity_data_storage";
-    public static final String BLOCK_DATA_KEY = "slimefunhelper:world_manager/block_data_storage";
+    public static final String ENTITY_DATA_KEY = "rennaikanksmp:world_manager/entity_data_storage";
+    public static final String BLOCK_DATA_KEY = "rennaikanksmp:world_manager/block_data_storage";
 
-    public static final String KEY_VILLAGER_TRADE = "slimefunhelper:villager/trade_info";
-    public static final String KEY_VILLAGER_TRADE_LOCK = "slimefunhelper:trade_lock";
-    public static final String KEY_VILLAGER_TRADE_LIST = "slimefunhelper:trade_list";
+    public static final String KEY_VILLAGER_TRADE = "rennaikanksmp:villager/trade_info";
+    public static final String KEY_VILLAGER_TRADE_LOCK = "rennaikanksmp:trade_lock";
+    public static final String KEY_VILLAGER_TRADE_LIST = "rennaikanksmp:trade_list";
 
     public void setVillagerTradeLock(VillagerEntity villager, boolean lock) {
         var status = getStatus(villager, true);
@@ -210,11 +210,11 @@ public class WorldManager extends BaseModule {
         }
     }
 
-    public static final String KEY_TRIAL_INFO = "slimefunhelper:trial/trial_info";
+    public static final String KEY_TRIAL_INFO = "rennaikanksmp:trial/trial_info";
 
-    public static final String KEY_TRIAL_FINISH_GLOBAL_TIME = "slimefunhelper:trial_cooldown_global_time";
+    public static final String KEY_TRIAL_FINISH_GLOBAL_TIME = "rennaikanksmp:trial_cooldown_global_time";
 
-    public static final String KEY_TRIAL_ACTIVE_GLOBAL_TIME = "slimefunhelper:trial_active_global_time";
+    public static final String KEY_TRIAL_ACTIVE_GLOBAL_TIME = "rennaikanksmp:trial_active_global_time";
 
     public void onTrialSpawnerStateUpdate(Event<BlockUpdate> event) {
         if (event.context.oldState().getBlock() == Blocks.TRIAL_SPAWNER

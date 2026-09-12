@@ -47,7 +47,7 @@ public class Config implements RefMap {
     private static final Set<Config> configs = new LinkedHashSet<>();
 
     public static final SimpleRegistry<Config> REGISTRY = new SimpleRegistry<>(
-            RegistryKey.ofRegistry(Identifier.of("slimefunhelper", "configs")), Lifecycle.stable());
+            RegistryKey.ofRegistry(Identifier.of("rennaikanksmp", "configs")), Lifecycle.stable());
     private static final Set<Config> allConfigInternal = new LinkedHashSet<>();
 
     @Getter
@@ -59,7 +59,7 @@ public class Config implements RefMap {
             RegistryKey<Config> registryKey = RegistryKey.of(
                     REGISTRY.getKey(),
                     Identifier.of(
-                            "slimefunhelper",
+                            "rennaikanksmp",
                             configName.toLowerCase(Locale.ROOT).replace(" ", "_")));
             this.registryKey = registryKey;
             REGISTRY.add(this.registryKey, this, RegistryEntryInfo.DEFAULT);

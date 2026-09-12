@@ -151,7 +151,7 @@ public class ChestHistory extends BaseModule {
     }
 
     private static final String KEY_SHULKER_BOX_PLACED_BY_PLAYER =
-            "slimefunhelper:chest_history/tracked_self_place_shulker";
+            "rennaikanksmp:chest_history/tracked_self_place_shulker";
 
     public void onPlaceShulkerBox(Event<PlayerInteractBlockC2SPacket> eventInteract) {
         PlayerInteractBlockC2SPacketAccess access = PlayerInteractBlockC2SPacketAccess.of(eventInteract.context);
@@ -240,7 +240,7 @@ public class ChestHistory extends BaseModule {
         }
     }
 
-    public static String KEY_INV_STORAGE = "slimefunhelper:chesthistory/inventory_content";
+    public static String KEY_INV_STORAGE = "rennaikanksmp:chesthistory/inventory_content";
 
     public void onAddEntry(ContainerPosition containerPosition, BlockState state, Entry newEntry) {
         if (containerPosition.isDouble()) {

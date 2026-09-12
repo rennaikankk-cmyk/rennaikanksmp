@@ -36,8 +36,8 @@ public class PageButtonElement extends ButtonElement {
                 1);
     }
 
-    protected static final Identifier ARROW_LEFT_SPRITE = new Identifier("slimefunhelper", "gui/arrow_left");
-    protected static final Identifier ARROW_RIGHT_SPRITE = new Identifier("slimefunhelper", "gui/arrow_right");
+    protected static final Identifier ARROW_LEFT_SPRITE = new Identifier("rennaikanksmp", "gui/arrow_left");
+    protected static final Identifier ARROW_RIGHT_SPRITE = new Identifier("rennaikanksmp", "gui/arrow_right");
 
     public PageButtonElement(List<Text> pageSwitch, int maxPage, AtomicInteger page, boolean left) {
         this(pageSwitch, maxPage, page::get, page::set, left ? -1 : 1);

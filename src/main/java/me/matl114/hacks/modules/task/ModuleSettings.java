@@ -98,7 +98,7 @@ public class ModuleSettings extends BaseModule {
         }
     }
 
-    public static final String TOGGLE_UNIQUE_ID = "slimefunhelper:module_toggle/";
+    public static final String TOGGLE_UNIQUE_ID = "rennaikanksmp:module_toggle/";
 
     public void sendToggleMessage(String message, boolean result) {
         if (checkNull()) return;

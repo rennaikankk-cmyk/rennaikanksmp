@@ -50,7 +50,7 @@ public class AutoBreed extends BaseModule {
     private static final int PEN_SEARCH_RADIUS = 5;
     private static final int PEN_MAX_AREA = 256;
     private static final int PEN_MAX_SIDE = 16;
-    private static final String BABY_BREED_COUNT_KEY = "slimefunhelper:auto_breed/baby_breed_count";
+    private static final String BABY_BREED_COUNT_KEY = "rennaikanksmp:auto_breed/baby_breed_count";
 
     public AutoBreed() {
         super("AutoBreed");

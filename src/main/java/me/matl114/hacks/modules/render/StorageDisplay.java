@@ -297,7 +297,7 @@ public class StorageDisplay extends BaseModule {
             if (optionalChicken != null) {
                 String val = dnaInfo.get(optionalChicken);
                 if (val != null) {
-                    RenderListener.getModModel(new Identifier("slimefunhelper", "gce/" + val))
+                    RenderListener.getModModel(new Identifier("rennaikanksmp", "gce/" + val))
                             .ifPresent(bakedModelEvent::context);
                 }
             }

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "rennaikanksmp:spear/iron_spear"
+  }
+}

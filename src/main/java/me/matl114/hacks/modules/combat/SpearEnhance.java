@@ -220,17 +220,17 @@ public class SpearEnhance extends BaseModule {
     // 初始化
     {
         // 木制
-        materialSwordToSpearMap.put(Items.WOODEN_SWORD, new Identifier("slimefunhelper", "spear/wooden_spear"));
+        materialSwordToSpearMap.put(Items.WOODEN_SWORD, new Identifier("rennaikanksmp", "spear/wooden_spear"));
         // 石制
-        materialSwordToSpearMap.put(Items.STONE_SWORD, new Identifier("slimefunhelper", "spear/stone_spear"));
+        materialSwordToSpearMap.put(Items.STONE_SWORD, new Identifier("rennaikanksmp", "spear/stone_spear"));
         // 铁制
-        materialSwordToSpearMap.put(Items.IRON_SWORD, new Identifier("slimefunhelper", "spear/iron_spear"));
+        materialSwordToSpearMap.put(Items.IRON_SWORD, new Identifier("rennaikanksmp", "spear/iron_spear"));
         // 金制
-        materialSwordToSpearMap.put(Items.GOLDEN_SWORD, new Identifier("slimefunhelper", "spear/golden_spear"));
+        materialSwordToSpearMap.put(Items.GOLDEN_SWORD, new Identifier("rennaikanksmp", "spear/golden_spear"));
         // 钻石
-        materialSwordToSpearMap.put(Items.DIAMOND_SWORD, new Identifier("slimefunhelper", "spear/diamond_spear"));
+        materialSwordToSpearMap.put(Items.DIAMOND_SWORD, new Identifier("rennaikanksmp", "spear/diamond_spear"));
         // 下界合金
-        materialSwordToSpearMap.put(Items.NETHERITE_SWORD, new Identifier("slimefunhelper", "spear/netherite_spear"));
+        materialSwordToSpearMap.put(Items.NETHERITE_SWORD, new Identifier("rennaikanksmp", "spear/netherite_spear"));
     }
 
     public void onAtlas(Event<Set<Identifier>> event) {
@@ -238,8 +238,8 @@ public class SpearEnhance extends BaseModule {
             event.context()
                     .addAll(ResourceUtils.lookupResources(
                             event.getArgs(0),
-                            "slimefunhelper",
-                            "slimefunhelper",
+                            "rennaikanksmp",
+                            "rennaikanksmp",
                             "textures",
                             ".png",
                             s -> s.startsWith("spear")));
@@ -250,8 +250,8 @@ public class SpearEnhance extends BaseModule {
         event.context()
                 .addAll(ResourceUtils.lookupResources(
                         event.getArgs(0),
-                        "slimefunhelper",
-                        "slimefunhelper",
+                        "rennaikanksmp",
+                        "rennaikanksmp",
                         "models",
                         ".json",
                         s -> s.startsWith("spear")));
@@ -274,7 +274,7 @@ public class SpearEnhance extends BaseModule {
         }
     }
 
-    private static final String META_DATA_SPEAR_LAST_KINETIC_TIME = "slimefunhelper:spear_module/last_kinetic_time";
+    private static final String META_DATA_SPEAR_LAST_KINETIC_TIME = "rennaikanksmp:spear_module/last_kinetic_time";
 
     public void onEntityStatus(Event<EntityStatusS2CPacket> event) {
         if (checkNull()) return;
@@ -494,21 +494,21 @@ public class SpearEnhance extends BaseModule {
     {
         // 木制
         materialSwordToSpearInHandMap.put(
-                Items.WOODEN_SWORD, new Identifier("slimefunhelper", "spear/wooden_spear_in_hand"));
+                Items.WOODEN_SWORD, new Identifier("rennaikanksmp", "spear/wooden_spear_in_hand"));
         // 石制
         materialSwordToSpearInHandMap.put(
-                Items.STONE_SWORD, new Identifier("slimefunhelper", "spear/stone_spear_in_hand"));
+                Items.STONE_SWORD, new Identifier("rennaikanksmp", "spear/stone_spear_in_hand"));
         // 铁制
         materialSwordToSpearInHandMap.put(
-                Items.IRON_SWORD, new Identifier("slimefunhelper", "spear/iron_spear_in_hand"));
+                Items.IRON_SWORD, new Identifier("rennaikanksmp", "spear/iron_spear_in_hand"));
         // 金制
         materialSwordToSpearInHandMap.put(
-                Items.GOLDEN_SWORD, new Identifier("slimefunhelper", "spear/golden_spear_in_hand"));
+                Items.GOLDEN_SWORD, new Identifier("rennaikanksmp", "spear/golden_spear_in_hand"));
         // 钻石
         materialSwordToSpearInHandMap.put(
-                Items.DIAMOND_SWORD, new Identifier("slimefunhelper", "spear/diamond_spear_in_hand"));
+                Items.DIAMOND_SWORD, new Identifier("rennaikanksmp", "spear/diamond_spear_in_hand"));
         // 下界合金
         materialSwordToSpearInHandMap.put(
-                Items.NETHERITE_SWORD, new Identifier("slimefunhelper", "spear/netherite_spear_in_hand"));
+                Items.NETHERITE_SWORD, new Identifier("rennaikanksmp", "spear/netherite_spear_in_hand"));
     }
 }

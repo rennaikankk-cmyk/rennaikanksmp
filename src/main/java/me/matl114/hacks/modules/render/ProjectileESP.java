@@ -71,7 +71,7 @@ public class ProjectileESP extends BaseModule {
         registerListener(Listener.getServerEntitySpawnListener(), this::onEntitySpawn);
     }
 
-    private static final String flagCalculateProjectile = "slimefunhelper:calculate_projectile";
+    private static final String flagCalculateProjectile = "rennaikanksmp:calculate_projectile";
 
     public void onEntitySpawn(Event<Entity> event) {
         if (enable.get()

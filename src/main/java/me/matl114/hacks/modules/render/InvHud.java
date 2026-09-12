@@ -88,7 +88,7 @@ public class InvHud extends BaseModule {
         int sizeX = mc.getWindow().getScaledWidth();
         int sizeY = mc.getWindow().getScaledHeight();
         //        vdraw.pushMatrix();
-        //        vdraw.drawTexturedQuad(Identifier.tryParse("slimefunhelper:textures/custom/genshin_impact.png"), sizeX
+        //        vdraw.drawTexturedQuad(Identifier.tryParse("rennaikanksmp:textures/custom/genshin_impact.png"), sizeX
         // - 30,sizeX, sizeY - 20, sizeY, 0, 0,1,0 , 1);
         //        vdraw.popMatrix();
         var pp = pos.get();

@@ -18,20 +18,20 @@ public interface Constants {
     Color SLOT_HIGHLIGHT_COLOR = new Color(128, 128, 128);
     int SLOT_HIGHLIGHT_INT = -2130706433;
 
-    public static final Identifier SEARCH_TEXTURE_SPRITE = new Identifier("slimefunhelper", "gui/search");
+    public static final Identifier SEARCH_TEXTURE_SPRITE = new Identifier("rennaikanksmp", "gui/search");
 
-    public static final Identifier FORMATTING_TEXTURE_SPRITE = new Identifier("slimefunhelper", "gui/format");
+    public static final Identifier FORMATTING_TEXTURE_SPRITE = new Identifier("rennaikanksmp", "gui/format");
 
-    public static final Identifier LIST_TAG_SPRITE = new Identifier("slimefunhelper", "gui/list_tag");
+    public static final Identifier LIST_TAG_SPRITE = new Identifier("rennaikanksmp", "gui/list_tag");
 
-    public static final Identifier EDITOR_SPRITE = new Identifier("slimefunhelper", "gui/editor");
+    public static final Identifier EDITOR_SPRITE = new Identifier("rennaikanksmp", "gui/editor");
 
-    public static final Identifier REMOVE_SPRITE = new Identifier("slimefunhelper", "gui/remove");
+    public static final Identifier REMOVE_SPRITE = new Identifier("rennaikanksmp", "gui/remove");
 
-    public static final Identifier SHIFT_UP_SPRITE = new Identifier("slimefunhelper", "gui/move_up");
-    public static final Identifier SHIFT_DOWN_SPRITE = new Identifier("slimefunhelper", "gui/move_down");
+    public static final Identifier SHIFT_UP_SPRITE = new Identifier("rennaikanksmp", "gui/move_up");
+    public static final Identifier SHIFT_DOWN_SPRITE = new Identifier("rennaikanksmp", "gui/move_down");
 
-    public static final Identifier ADD_SPRITE = new Identifier("slimefunhelper", "gui/add");
+    public static final Identifier ADD_SPRITE = new Identifier("rennaikanksmp", "gui/add");
 
     public static List<Text> searchRegistryTooltips() {
         return ChatUtils.parseTooltipsTranslation("widget.gui.constants.search-registry.tooltips", "");
@@ -47,16 +47,16 @@ public interface Constants {
         return ChatUtils.parseTooltipsTranslation("widget.gui.constants.open-list-preview.tooltips", "");
     }
 
-    public static final Identifier EXPAND_GUI_ON_SPRITE = new Identifier("slimefunhelper", "gui/triangle");
-    public static final Identifier EXPAND_GUI_OFF_SPRITE = new Identifier("slimefunhelper", "gui/triangle_90");
+    public static final Identifier EXPAND_GUI_ON_SPRITE = new Identifier("rennaikanksmp", "gui/triangle");
+    public static final Identifier EXPAND_GUI_OFF_SPRITE = new Identifier("rennaikanksmp", "gui/triangle_90");
 
     public static final Map<EquipmentSlot, Identifier> EMPTY_SLOT_TO_SPRITE =
             ImmutableMap.<EquipmentSlot, Identifier>builder()
-                    .put(EquipmentSlot.MAINHAND, new Identifier("slimefunhelper", "gui/empty_main_hand_slot"))
-                    .put(EquipmentSlot.OFFHAND, new Identifier("slimefunhelper", "gui/empty_armor_slot_shield"))
-                    .put(EquipmentSlot.FEET, new Identifier("slimefunhelper", "gui/empty_armor_slot_boots"))
-                    .put(EquipmentSlot.LEGS, new Identifier("slimefunhelper", "gui/empty_armor_slot_leggings"))
-                    .put(EquipmentSlot.CHEST, new Identifier("slimefunhelper", "gui/empty_armor_slot_chestplate"))
-                    .put(EquipmentSlot.HEAD, new Identifier("slimefunhelper", "gui/empty_armor_slot_helmet"))
+                    .put(EquipmentSlot.MAINHAND, new Identifier("rennaikanksmp", "gui/empty_main_hand_slot"))
+                    .put(EquipmentSlot.OFFHAND, new Identifier("rennaikanksmp", "gui/empty_armor_slot_shield"))
+                    .put(EquipmentSlot.FEET, new Identifier("rennaikanksmp", "gui/empty_armor_slot_boots"))
+                    .put(EquipmentSlot.LEGS, new Identifier("rennaikanksmp", "gui/empty_armor_slot_leggings"))
+                    .put(EquipmentSlot.CHEST, new Identifier("rennaikanksmp", "gui/empty_armor_slot_chestplate"))
+                    .put(EquipmentSlot.HEAD, new Identifier("rennaikanksmp", "gui/empty_armor_slot_helmet"))
                     .build();
 }
