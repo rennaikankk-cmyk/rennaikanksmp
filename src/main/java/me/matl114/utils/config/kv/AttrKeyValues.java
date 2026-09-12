@@ -9,8 +9,7 @@ import java.util.Map;
 import java.util.function.Function;
 import lombok.Getter;
 import me.matl114.gui.basic.*;
-import me.matl114.gui.elements.ButtonElement;
-import me.matl114.gui.elements.IconElement;
+import me.matl114.gui.elements.ToggleSwitchElement;
 import me.matl114.utils.config.AttrKeyValue;
 import me.matl114.utils.config.BaseAttrKeyValue;
 import me.matl114.utils.config.WrapperFactory;
@@ -23,12 +22,12 @@ import net.minecraft.util.math.MathHelper;
 
 public interface AttrKeyValues {
     public static final AttrKeyValue.CustomWidgetFactory<Boolean> BOOLEAN_WIDGET_FACTORY = (s, x, y, inputDx, dy) -> {
+        // toggle switch instead of the vanilla button texture: on/off is
+        // color-coded (green vs transparent) instead of two similar buttons
         return ExecutableWidget.instance(x, y, dy, dy)
-                .setElementHandler(IconElement.statedGuiPredicate(
-                        ButtonElement.BUTTON,
-                        ButtonElement.BUTTON_INACTIVE,
+                .setElementHandler(new ToggleSwitchElement(
                         ButtonAction.run(() -> s.valueChange(s, String.valueOf(!s.getOriginValue()))),
-                        (bl) -> s.getOriginValue()));
+                        s::getOriginValue));
     };
     public static WrapperFactory<String, Boolean> BOOL_FACTORY = WrapperFactory.of(
             (s) -> {

@@ -137,7 +137,6 @@
 	"module-toggle.velocity-management.floating-utils.grim-floating.enable": "冻结",
 	"module-toggle.velocity-management.floating-utils.elytra-slow-falling.enable": "鞘翅缓降",
 	"module-toggle.travelling-control.search-control.enable": "搜索控制",
-	"module-toggle.freecam.enable": "自由视角",
 	"module-toggle.auto-inv.steal.enable": "自动偷取",
 	"module-toggle.auto-inv.auto-shulker.enable": "自动潜影盒",
 	"module-toggle.att-bot.always-att": "攻击增强",

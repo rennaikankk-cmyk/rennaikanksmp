@@ -9,9 +9,10 @@ import net.minecraft.text.OrderedText;
 import net.minecraft.util.math.MathHelper;
 
 /**
- * Module list entry: subtle vertical gradient body, a 2px accent bar on the
- * left when the module is enabled, a white wash on hover and a hairline
- * separator at the bottom. Replaces the flat {@link ColorBoxElement} look.
+ * Module list entry: subtle vertical gradient body, a white wash on hover and
+ * a hairline separator at the bottom. The enable state is shown by the pill
+ * switch on the right (green = on, transparent = off) instead of the old 2px
+ * accent bar. Replaces the flat {@link ColorBoxElement} look.
  */
 public class ModuleListButtonElement extends BoxElement {
     protected final TextProvider text;
@@ -54,19 +55,19 @@ public class ModuleListButtonElement extends BoxElement {
         if (shouldHighlight) {
             context.fill(0, 0, width, height, 0, 0x24FFFFFF);
         }
-        if (isEnabled) {
-            context.fill(0, 0, 2, height, 0, accentColor.getColorInt());
-        }
         context.fill(0, height - 1, width, height, 0, 0x14FFFFFF);
+        // pill switch on the right carries the on/off state now
+        int switchW = Math.min(20, Math.max(14, height));
+        ToggleSwitchElement.drawSwitch(context, width - switchW - 3, 0, switchW, height, isEnabled, alpha);
         OrderedText text1 = text.getLabel(element);
         if (text1 != null) {
             RenderHandler.drawScaledText0(
                     context,
                     mc.textRenderer,
                     text1,
-                    isEnabled ? 2 : 0,
                     0,
-                    width - (isEnabled ? 2 : 0),
+                    0,
+                    width - switchW - 5,
                     height,
                     textColor.getColorInt() | (MathHelper.ceil(alpha * 255.0F) << 24),
                     0);
