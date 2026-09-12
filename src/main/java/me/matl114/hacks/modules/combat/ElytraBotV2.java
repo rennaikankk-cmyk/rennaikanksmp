@@ -1,5 +1,6 @@
 package me.matl114.hacks.modules.combat;
 
+import com.mojang.datafixers.util.Pair;
 import java.awt.Color;
 import java.util.ArrayDeque;
 import java.util.List;
@@ -279,6 +280,38 @@ public class ElytraBotV2 extends BaseModule {
     public final IntRef lostTargetTicks = intBuilder(path.add("lost-target-ticks"))
             .defaultValue(40)
             .validator(Configs.INT_POSITIVE)
+            .build();
+
+    // ---------------- v1-inspired mace/spear upgrades ----------------
+
+    /** head-on closing: bank 10 blocks of height over the target, then drop the mace */
+    public final FlagRef maceDownAttack = flagBuilder(path.add("mace-down-attack"))
+            .defaultValue(true)
+            .show(() -> mode.get().isIn(Mode.MACE))
+            .build();
+
+    /** swing in along the engagement-circle tangent instead of a nose-on beeline */
+    public final FlagRef maceSmoothFlight = flagBuilder(path.add("mace-smooth-flight"))
+            .defaultValue(true)
+            .show(() -> mode.get().isIn(Mode.MACE))
+            .build();
+
+    /** far from the target, cap climb/dive at 45° so horizontal speed survives */
+    public final FlagRef maceAngleOptimize = flagBuilder(path.add("mace-angle-optimize"))
+            .defaultValue(true)
+            .show(() -> mode.get().isIn(Mode.MACE))
+            .build();
+
+    public final IntRef maceAngleRange = intBuilder(path.add("mace-angle-range"))
+            .defaultValue(16)
+            .validator(Configs.INT_POSITIVE)
+            .show(() -> mode.get().isIn(Mode.MACE) && maceAngleOptimize.get())
+            .build();
+
+    /** spear: peel off after each strike while the cooldown recovers */
+    public final FlagRef spearPullOver = flagBuilder(path.add("spear-pull-over"))
+            .defaultValue(true)
+            .show(() -> mode.get().isIn(Mode.SPEAR))
             .build();
 
     public final NBTRef<OptionalPrimitive<Double>> followOnGroundHeight = builder(
@@ -1048,10 +1081,12 @@ public class ElytraBotV2 extends BaseModule {
         static final int STATE_FOLLOW = 2;
         static final int STATE_WAIT_ATTACK = 3;
         static final int STATE_HOVER = 4;
+        static final int STATE_DOWN_ATTACK = 5;
 
         StateMachine stateMachine;
         int startWaitAttack = -1;
         int startPullUpTick = 0;
+        int downAttackTicks = 0;
         double hoverAngle = 0.0D;
         int lastMaceAttackTick = Integer.MIN_VALUE;
         int lastMaceAttackSuccessTick = Integer.MIN_VALUE;
@@ -1067,9 +1102,11 @@ public class ElytraBotV2 extends BaseModule {
                     this::onStatePullUp,
                     this::onStateFollow,
                     this::onStateWaitAttack,
-                    this::onStateHover);
+                    this::onStateHover,
+                    this::onStateDownAttack);
             stateMachine.registerListener(STATE_WAIT_ATTACK, this::onStartWaitAttack);
             stateMachine.registerListener(STATE_PULL_UP, this::onStartPullUp);
+            stateMachine.registerListener(STATE_DOWN_ATTACK, this::onStartDownAttack);
         }
 
         public int onCondition(StateMachine machine, int state) {
@@ -1093,6 +1130,12 @@ public class ElytraBotV2 extends BaseModule {
                 startPullUpTick = Tasks.getTick();
             } else {
                 startPullUpTick = 0;
+            }
+        }
+
+        public void onStartDownAttack(boolean on) {
+            if (on) {
+                downAttackTicks = 0;
             }
         }
 
@@ -1130,6 +1173,32 @@ public class ElytraBotV2 extends BaseModule {
                 // can not pull up here: try to follow out
                 return STATE_FOLLOW;
             }
+            // head-on closing (v1 MaceArua): inside ~12 blocks while they press
+            // or trade — bank 10 blocks of height over them first, then drop
+            // the mace; mace damage scales with fall distance
+            if (base.maceDownAttack.get()
+                    && (base.currentInCombatRange || base.currentAction == TargetActionV2.TOWARDS)
+                    && mc.player.getPos().squaredDistanceTo(base.target.getPos()) < 150.0D) {
+                return STATE_DOWN_ATTACK;
+            }
+            // smooth arc approach (v1 combatSmoothFlight): inside the
+            // engagement circle and no higher than the target, swing in along
+            // the circle tangent instead of a nose-on beeline
+            if (base.maceSmoothFlight.get() && !base.currentOnGround) {
+                double radius = base.combatMaceRange.get() + 3.0D;
+                Vec3d center = base.target.getBoundingBox().getCenter();
+                if (mc.player.getPos().squaredDistanceTo(center) < radius * radius
+                        && predictor.getY() >= mc.player.getY()) {
+                    Pair<Vec3d, Vec3d> tangents = MathUtils.getTangentWithSameXZ(center, radius, mc.player.getPos());
+                    Vec3d tangent =
+                            tangents.getFirst().y < tangents.getSecond().y ? tangents.getSecond() : tangents.getFirst();
+                    if (tangent.y > 0.0D) {
+                        movementDirection = tangent.add(0, 0.01D, 0).normalize().multiply(10.0D);
+                        machine.markForEndState();
+                        return STATE_PULL_UP;
+                    }
+                }
+            }
             double targetY =
                     base.target.getY() + (base.currentOnGround ? base.maceHeightGround.get() : base.maceHeight.get());
             boolean mayFollow = (mc.player.getY() >= targetY)
@@ -1145,6 +1214,34 @@ public class ElytraBotV2 extends BaseModule {
             setTargetToPlayerUpper(predictor);
             machine.markForEndState();
             return STATE_PULL_UP;
+        }
+
+        public int onStateDownAttack(StateMachine machine) {
+            if (downAttackTicks < 3 && (base.currentInCombatRange || base.currentAction == TargetActionV2.TOWARDS)) {
+                downAttackTicks++;
+                // climb at the point 10 above the target, braking on the steep
+                // share (v1) so the 3-tick bank actually converts to height
+                movementDirection = base.target.getPos().add(0, 10.0D, 0).subtract(mc.player.getPos());
+                Vec3d look = movementDirection.normalize();
+                if (look.y < 0.0D) {
+                    base.behaviourSpeedMultiplier = Math.min(1.0D, 0.75D / Math.abs(look.y));
+                }
+                machine.markForEndState();
+                return STATE_DOWN_ATTACK;
+            }
+            Vec3d hitbox = base.target.getPos().add(0, base.target.getHeight() * 0.5D, 0);
+            if (TargetSelector.INSTANCE.isWithinAttackRange(
+                    mc.player.getPos(),
+                    base.target.getBoundingBox(),
+                    CombatTasks.getCombatExtra().getAttackAtTargetRange(base.target))) {
+                setTargetToPlayer(hitbox);
+                scheduleAttack();
+                movementDirection = Vec3d.ZERO;
+                machine.markForEndState();
+                return STATE_WAIT_ATTACK;
+            }
+            // height banked or the window closed: hand over to the dive
+            return STATE_FOLLOW;
         }
 
         public int onStateHover(StateMachine machine) {
@@ -1256,6 +1353,7 @@ public class ElytraBotV2 extends BaseModule {
             if (movement.length() < 5) {
                 movement = movement.normalize().multiply(5);
             }
+            movement = clampApproachAngle(movement, predictor);
             movementDirection = avoid(movement);
         }
 
@@ -1283,10 +1381,37 @@ public class ElytraBotV2 extends BaseModule {
                 double magnitude = base.dodgeIntensity.get() * 0.8D;
                 movement = movement.add(lateralDodge(movement, magnitude)).normalize();
             }
+            movement = clampApproachAngle(movement, targetPos);
             if (movement.length() < 5) {
                 movement = movement.multiply(5);
             }
             movementDirection = movement;
+        }
+
+        /**
+         * angle clamp (v1 angleOptimize): far from the target, cap the
+         * climb/dive at 45° so the horizontal speed — the thing that feeds
+         * elytra lift and closing rate — survives the approach
+         */
+        protected Vec3d clampApproachAngle(Vec3d movement, Vec3d aimPos) {
+            if (!base.maceAngleOptimize.get() || base.currentOnGround) {
+                return movement;
+            }
+            double horizontalToTarget = mc.player.getPos().subtract(aimPos).horizontalLength();
+            if (horizontalToTarget <= base.maceAngleRange.get()) {
+                return movement;
+            }
+            double horizontalDir = Math.max(Math.abs(movement.x), Math.abs(movement.z));
+            if (horizontalDir < 0.1D) {
+                return movement;
+            }
+            if (movement.y > horizontalDir) {
+                return movement.withAxis(Direction.Axis.Y, horizontalDir);
+            }
+            if (movement.y < -horizontalDir) {
+                return movement.withAxis(Direction.Axis.Y, -horizontalDir);
+            }
+            return movement;
         }
 
         public boolean shouldPullUpEating() {
@@ -1423,6 +1548,7 @@ public class ElytraBotV2 extends BaseModule {
         static final int STATE_ORBIT = 0;
         static final int STATE_ENGAGE = 1;
         static final int STATE_DODGE = 2;
+        static final int STATE_PULL_OVER = 3;
 
         double orbitAngle = 0.0D;
         int dodgeTicksLeft = 0;
@@ -1431,13 +1557,19 @@ public class ElytraBotV2 extends BaseModule {
         int nextFeintFlip = 0;
         int engageUntil = Integer.MIN_VALUE;
         int reengageCooldownUntil = Integer.MIN_VALUE;
+        int pullOverTicks = 0;
         boolean wasTargetUsingSpear = false;
 
         StateMachine stateMachine;
 
         public SpearV2() {
             stateMachine = new StateMachine(
-                    STATE_ORBIT, this::onCondition, this::onStateOrbit, this::onStateEngage, this::onStateDodge);
+                    STATE_ORBIT,
+                    this::onCondition,
+                    this::onStateOrbit,
+                    this::onStateEngage,
+                    this::onStateDodge,
+                    this::onStatePullOver);
         }
 
         public int onCondition(StateMachine machine, int state) {
@@ -1566,10 +1698,41 @@ public class ElytraBotV2 extends BaseModule {
                     }
                     CombatTasks.getAttack().attackEntity(base.target, settings);
                     base.markAttacked();
+                    // poke and retreat (v1 PULL_OVER): strike thrown, peel off
+                    // at 45° while the cooldown recovers instead of hovering
+                    // in their spear range
+                    if (base.spearPullOver.get()) {
+                        pullOverTicks = 0;
+                        machine.markForEndState();
+                        return STATE_PULL_OVER;
+                    }
                 }
             }
             machine.markForEndState();
             return STATE_ENGAGE;
+        }
+
+        public int onStatePullOver(StateMachine machine) {
+            if (++pullOverTicks > 15) {
+                machine.markForEndState();
+                return STATE_ORBIT;
+            }
+            // target fled hard mid-retreat: cut it short and re-press
+            if (base.currentAction == TargetActionV2.ESCAPING
+                    && mc.player.getPos().distanceTo(base.target.getPos()) > base.combatSpearRange.get() + 6.0D) {
+                machine.markForEndState();
+                return STATE_ORBIT;
+            }
+            Vec3d away = mc.player.getPos().subtract(base.target.getPos()).withAxis(Direction.Axis.Y, 0);
+            if (away.lengthSquared() < 1E-4) {
+                away = new Vec3d(1, 0, 0);
+            }
+            double cruise = Math.max(0.8D, mc.player.getVelocity().length());
+            // v1: peel away level-or-up at 45° — keeps speed and banks a
+            // little height for the next pass
+            movementDirection = away.normalize().add(0, 1.0D, 0).normalize().multiply(cruise);
+            machine.markForEndState();
+            return STATE_PULL_OVER;
         }
 
         /** charged spear inside its range, aimed at our hemisphere */
