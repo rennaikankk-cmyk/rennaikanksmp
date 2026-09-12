@@ -19,8 +19,8 @@
 		]
 	},
 	"mixins": [
-		"rennaikanksmp.mixins.json",
-		"rennaikanksmp.mixins.hooks.json"
+		"slimefunhelper.mixins.json",
+		"slimefunhelper.mixins.hooks.json"
 	],
 	"depends": {
 		"fabricloader": ">=0.15.1",
