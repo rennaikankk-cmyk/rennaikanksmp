@@ -127,7 +127,7 @@ public class HoleESP extends BaseModule {
     /** returns null when not a hole, otherwise whether all four walls are bedrock */
     private Boolean classifyHole(BlockPos pos) {
         BlockState floor = mc.world.getBlockState(pos.down());
-        if (!floor.isOpaqueFullCube()) {
+        if (!floor.isOpaqueFullCube(mc.world, pos.down())) {
             return null;
         }
         if (!mc.world.getBlockState(pos).isAir()

@@ -5,7 +5,6 @@ import lombok.experimental.Accessors;
 import me.matl114.gui.basic.*;
 import me.matl114.utils.config.ValueAccessor;
 import me.matl114.versioned.api.VDrawContext;
-import net.minecraft.util.Colors;
 
 @Accessors(chain = true)
 public class AdvancedScrollElement extends AbstractElement {
@@ -139,10 +138,15 @@ public class AdvancedScrollElement extends AbstractElement {
                 y2 = (int) (currentStartX + currentBarHeight);
             }
 
-            context.fill(1, y1 + 1, element.getTextureWidth() - 1, y2 - 1, Colors.GRAY);
-            if (element.isDragging() || (element.isMouseOver(mouseX, mouseY) && isMouseOverBar(element, mouseY))) {
-                RenderHandler.drawHighlightFrame(context, 0, y1, element.getTextureWidth(), y2 - y1, Colors.WHITE);
-            }
+            int width = element.getTextureWidth();
+            int thumbX1 = width - 4;
+            int thumbX2 = width - 2;
+            // faint full-height track plus a slim modern thumb that
+            // brightens while dragged or hovered
+            context.fill(thumbX1, 0, thumbX2, element.getTextureHeight(), 0, 0x14FFFFFF);
+            boolean active =
+                    element.isDragging() || (element.isMouseOver(mouseX, mouseY) && isMouseOverBar(element, mouseY));
+            context.fill(thumbX1, y1, thumbX2, y2, 0, active ? 0x99FFFFFF : 0x59FFFFFF);
         }
     }
 }

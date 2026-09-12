@@ -79,7 +79,8 @@ public abstract class LivingEntityMixin extends Entity implements LivingEntityAc
                             target =
                                     "Lnet/minecraft/entity/LivingEntity;addVelocityInternal(Lnet/minecraft/util/math/Vec3d;)V",
                             shift = At.Shift.BEFORE),
-            cancellable = true)
+            cancellable = true,
+            require = 0)
     private void fixJumpingWhileSprintingBackward(CallbackInfo ci, @Local Vec3d vec3d) {
         if (MovTasks.getSprint().directionalSprint.get()) {
             //            float g = this.getYaw() * 0.017453292F;
@@ -104,6 +105,8 @@ public abstract class LivingEntityMixin extends Entity implements LivingEntityAc
         }
     }
 
+    // travelInFluid only exists on 1.21.2+; on 1.21.1 this anchor is absent,
+    // require = 0 degrades the firework water-glide override instead of crashing
     @Inject(
             method = "travel",
             at =
@@ -112,7 +115,8 @@ public abstract class LivingEntityMixin extends Entity implements LivingEntityAc
                             target =
                                     "Lnet/minecraft/entity/LivingEntity;travelInFluid(Lnet/minecraft/util/math/Vec3d;)V",
                             shift = At.Shift.BEFORE),
-            cancellable = true)
+            cancellable = true,
+            require = 0)
     private void onWaterGlide(Vec3d movementInput, CallbackInfo ci) {
         if (checkClientPlayer()) {
             if (isFallFlying()
@@ -141,7 +145,8 @@ public abstract class LivingEntityMixin extends Entity implements LivingEntityAc
                     @At(
                             value = "INVOKE",
                             target = "Lnet/minecraft/entity/LivingEntity;setVelocity(Lnet/minecraft/util/math/Vec3d;)V",
-                            ordinal = 6))
+                            ordinal = 6),
+            require = 0)
     private void travelGliding(LivingEntity instance, Vec3d oldVelocity, Operation<Vec3d> original) {
         if (checkClientPlayer()) {
             Vec3d velocity = ElytraExtra.INSTANCE.requestNextOverrideVelocity();
