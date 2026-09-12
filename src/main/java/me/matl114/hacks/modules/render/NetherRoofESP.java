@@ -177,7 +177,7 @@ public class NetherRoofESP extends BaseModule {
         baselinePrefix = entry != null ? entry.address : "singleplayer";
         snapshotStorage.read(NbtCompound.CODEC).result().ifPresent(compound -> {
             for (String key : compound.getKeys()) {
-                savedBaseline.put(key, compound.getInt(key).orElse(0));
+                savedBaseline.put(key, compound.getInt(key));
             }
         });
     }
@@ -198,7 +198,7 @@ public class NetherRoofESP extends BaseModule {
         }
         snapshotStorage.write(compound, NbtOps.INSTANCE);
         for (String key : compound.getKeys()) {
-            savedBaseline.put(key, compound.getInt(key).orElse(0));
+            savedBaseline.put(key, compound.getInt(key));
         }
     }
 
