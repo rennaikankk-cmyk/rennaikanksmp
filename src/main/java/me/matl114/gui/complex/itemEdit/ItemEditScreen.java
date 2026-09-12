@@ -20,6 +20,7 @@ import me.matl114.gui.basic.*;
 import me.matl114.gui.complex.config.KeyValueInputWidget;
 import me.matl114.gui.complex.config.ListModifyWidget;
 import me.matl114.gui.elements.ButtonElement;
+import me.matl114.gui.elements.ToggleSwitchElement;
 import me.matl114.gui.elements.IconElement;
 import me.matl114.gui.elements.LabelElement;
 import me.matl114.gui.elements.SlotElement;
@@ -503,11 +504,9 @@ public class ItemEditScreen extends ConfirmingBigScreen {
                         var sec = flags[index];
                         subScreenWidget.addDrawableChild(ExecutableWidget.instance(
                                         50 + 1 + 20 * index, 1, 20 - 2, 20 - 2)
-                                .setElementHandler(IconElement.statedGuiPredicate(
-                                                ButtonElement.BUTTON,
-                                                ButtonElement.BUTTON_INACTIVE,
+                                .setElementHandler(new ToggleSwitchElement(
                                                 ButtonAction.run(() -> sec.setHideFlag(sample, !sec.isHide(sample))),
-                                                (bl) -> sec.isHide(sample))
+                                                () -> sec.isHide(sample))
                                         .withTooltips(TooltipHandler.of(List.of(Text.literal(sec.displayName()))))));
                     }
                     return subScreenWidget;
