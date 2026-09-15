@@ -7,6 +7,7 @@ import java.util.*;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import me.matl114.SlimefunHelper;
 import me.matl114.commands.MainCommand;
 import me.matl114.gui.basic.DrawableWidget;
 import me.matl114.hacks.MainTasks;
@@ -741,7 +742,38 @@ public class ConfigManager extends BaseModule {
         return baseName + ".nbt";
     }
 
+    private static final Set<String> LEGACY_CONFIG_NAMESPACES = Set.of("slimefunhelper");
+
+    private static ConfigSnapshot portLegacyNamespaces(ConfigSnapshot snapshot) {
+        String currentNamespace = SlimefunHelper.MOD_ID;
+        boolean hasLegacy = snapshot.snapSnot().keySet().stream()
+                .anyMatch(key -> LEGACY_CONFIG_NAMESPACES.contains(key.getNamespace()));
+        if (!hasLegacy) {
+            return snapshot;
+        }
+        Map<Identifier, MapRef> ported = new LinkedHashMap<>();
+        for (Map.Entry<Identifier, MapRef> entry : snapshot.snapSnot().entrySet()) {
+            if (!entry.getKey().getNamespace().equals(currentNamespace)) {
+                continue;
+            }
+            ported.put(entry.getKey(), entry.getValue());
+        }
+        for (Map.Entry<Identifier, MapRef> entry : snapshot.snapSnot().entrySet()) {
+            Identifier key = entry.getKey();
+            if (!LEGACY_CONFIG_NAMESPACES.contains(key.getNamespace())) {
+                if (!key.getNamespace().equals(currentNamespace)) {
+                    ported.put(key, entry.getValue());
+                }
+                continue;
+            }
+            Identifier remapped = Identifier.of(currentNamespace, key.getPath());
+            ported.putIfAbsent(remapped, entry.getValue());
+        }
+        return new ConfigSnapshot(ported);
+    }
+
     private static ConfigSnapshot portConfigs(ConfigSnapshot snapshot) {
+        snapshot = portLegacyNamespaces(snapshot);
         if (portPaths.isEmpty()) return snapshot;
         Map<Identifier, MapRef> copyMap = new LinkedHashMap<>(snapshot.snapSnot());
         boolean modify = false;
